@@ -1,0 +1,53 @@
+{
+    "type": "object",
+    "properties": {
+        "contactId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "firstName": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "lastName": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "email": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "phone": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "extRef": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "language": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "unsubscribed": {
+            "type": [
+                "null",
+                "boolean"
+            ]
+        }
+    }
+}

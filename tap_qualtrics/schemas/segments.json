@@ -1,0 +1,77 @@
+{
+    "type": "object",
+    "properties": {
+        "criteria": {
+            "type": "object",
+            "properties": {
+                "simpleFilter": {
+                    "type": "object",
+                    "properties": {
+                        "filterType": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        },
+                        "comparison": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        },
+                        "value": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        },
+                        "mailingListId": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "segmentId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "contactCount": {
+            "type": [
+                "null",
+                "integer"
+            ]
+        },
+        "name": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "description": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "creationDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "lastModifiedDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        }
+    }
+}

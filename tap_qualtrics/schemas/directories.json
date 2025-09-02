@@ -1,0 +1,64 @@
+{
+    "type": "object",
+    "properties": {
+        "directoryId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "name": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "contactCount": {
+            "type": [
+                "null",
+                "integer"
+            ]
+        },
+        "isDefault": {
+            "type": [
+                "null",
+                "boolean"
+            ]
+        },
+        "deduplicationCriteria": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": [
+                        "null",
+                        "boolean"
+                    ]
+                },
+                "firstName": {
+                    "type": [
+                        "null",
+                        "boolean"
+                    ]
+                },
+                "lastName": {
+                    "type": [
+                        "null",
+                        "boolean"
+                    ]
+                },
+                "externalDataReference": {
+                    "type": [
+                        "null",
+                        "boolean"
+                    ]
+                },
+                "phone": {
+                    "type": [
+                        "null",
+                        "boolean"
+                    ]
+                }
+            }
+        }
+    }
+}
