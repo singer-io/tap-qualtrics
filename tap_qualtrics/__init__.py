@@ -7,7 +7,7 @@ from tap_qualtrics.sync import sync
 
 LOGGER = singer.get_logger()
 
-REQUIRED_CONFIG_KEYS = ['clientId', 'clientSecret', 'scope', 'grant_type', 'dataCenter', 'directory_id']
+REQUIRED_CONFIG_KEYS = ['clientId', 'clientSecret', 'scope', 'grant_type', 'dataCenter', 'directory_id', 'start_date', 'page_size']
 
 def do_discover():
     """

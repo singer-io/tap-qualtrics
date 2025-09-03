@@ -1,0 +1,10 @@
+{
+    "clientId": "clientId",
+    "clientSecret": "clientSecret",
+    "scope": "scope",
+    "grant_type": "grant_type",
+    "dataCenter": "dataCenter",
+    "directory_id": "directory_id",
+    "start_date": "2020-07-01T00:00:00Z",
+    "page_size": 100
+}
