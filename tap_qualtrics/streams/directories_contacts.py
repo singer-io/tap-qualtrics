@@ -1,11 +1,13 @@
-from tap_qualtrics.streams.abstracts import FullTableStream
+from tap_qualtrics.streams.abstracts import DirectoryChildStream
 
-class DirectoriesContacts(FullTableStream):
-    tap_stream_id = "directories_contacts"
+
+class DirectoryContacts(DirectoryChildStream):
+    """All contacts in a directory – paginated (page size 1000)."""
+    tap_stream_id = "directory_contacts"
     key_properties = ["contactId"]
     replication_method = "FULL_TABLE"
     data_key = "result.elements"
     path = "directories/{directory_id}/contacts"
-    path = "directories"
-    children = "['directories_contact']"
+    page_size = 1000
+    parent = "directories"
 

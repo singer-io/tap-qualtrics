@@ -2,53 +2,39 @@ import unittest
 from unittest.mock import patch, MagicMock
 from tap_qualtrics.streams.abstracts import IncrementalStream
 
-class ConcreteParentBaseStream(IncrementalStream):
-    @property
-    def key_properties(self):
-        return ["id"]
 
-    @property
-    def replication_keys(self):
-        return ["updated_at"]
+class ConcreteIncrementalStream(IncrementalStream):
+    tap_stream_id = "stream_1"
+    key_properties = ["id"]
+    replication_keys = ["updated_at"]
+    replication_method = "INCREMENTAL"
 
-    @property
-    def replication_method(self):
-        return "INCREMENTAL"
 
-    @property
-    def tap_stream_id(self):
-        return "stream_1"
+class TestIncrementalSync(unittest.TestCase):
 
-class TestSync(unittest.TestCase):
-    @patch("tap_qualtrics.streams.abstracts.metadata.to_map")
-    def setUp(self, mock_to_map):
-
+    def setUp(self):
         mock_catalog = MagicMock()
-        mock_catalog.schema.to_dict.return_value = {"key": "value"}
-        mock_catalog.metadata = "mock_metadata"
-        mock_to_map.return_value = {"metadata_key": "metadata_value"}
+        mock_catalog.schema.to_dict.return_value = {"type": "object", "properties": {}}
+        mock_catalog.metadata = []
+        self.stream = ConcreteIncrementalStream(
+            client=MagicMock(), catalog_entry=mock_catalog
+        )
+        self.stream.client.start_date = "2020-01-01"
 
-        self.stream = ConcreteParentBaseStream(catalog=mock_catalog)
-        self.stream.client = MagicMock()
-        self.stream.child_to_sync = []
+    @patch("tap_qualtrics.streams.abstracts.get_bookmark", return_value="2020-06-01")
+    def test_get_bookmark_returns_value(self, mock_bk):
+        result = self.stream.get_bookmark({})
+        assert result == "2020-06-01"
 
-    @patch("tap_qualtrics.streams.abstracts.get_bookmark", return_value=100)
-    def test_write_bookmark_with_state(self, mock_get_bookmark):
-
-        state = {'bookmarks': {'stream_1': {'updated_at': 100}}}
-        result = self.stream.write_bookmark(state, "stream_1", "updated_at", 200)
-        self.assertEqual(result, {'bookmarks': {'stream_1': {'updated_at': 200}}})
-
-    @patch("tap_qualtrics.streams.abstracts.get_bookmark", return_value=100)
-    def test_write_bookmark_without_state(self, mock_get_bookmark):
-
+    @patch("tap_qualtrics.streams.abstracts.get_bookmark", return_value="2020-06-01")
+    def test_write_bookmark_larger_value(self, mock_bk):
         state = {}
-        result = self.stream.write_bookmark(state, "stream_1", "updated_at", 200)
-        self.assertEqual(result, {'bookmarks': {'stream_1': {'updated_at': 200}}})
+        result = self.stream.write_bookmark(state, "2021-01-01")
+        assert result["bookmarks"]["stream_1"]["updated_at"] == "2021-01-01"
 
-    @patch("tap_qualtrics.streams.abstracts.get_bookmark", return_value=300)
-    def test_write_bookmark_with_old_value(self, mock_get_bookmark):
-
-        state = {'bookmarks': {'stream_1': {'updated_at': 300}}}
-        result = self.stream.write_bookmark(state, "stream_1", "updated_at", 200)
-        self.assertEqual(result, {'bookmarks': {'stream_1': {'updated_at': 300}}})
+    @patch("tap_qualtrics.streams.abstracts.get_bookmark", return_value="2021-06-01")
+    def test_write_bookmark_keeps_larger_existing(self, mock_bk):
+        state = {}
+        result = self.stream.write_bookmark(state, "2020-01-01")
+        # existing bookmark (2021-06-01) > new value (2020-01-01) → keep existing
+        assert result["bookmarks"]["stream_1"]["updated_at"] == "2021-06-01"

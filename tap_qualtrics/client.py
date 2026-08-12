@@ -1,8 +1,8 @@
-from typing import Any, Dict, Mapping, Optional, Tuple
+import time
+from typing import Any, Dict, Mapping, Optional
 
 import backoff
 import requests
-from requests import session
 from requests.exceptions import Timeout, ConnectionError, ChunkedEncodingError
 from singer import get_logger, metrics
 
@@ -10,14 +10,12 @@ from tap_qualtrics.exceptions import ERROR_CODE_EXCEPTION_MAPPING, QualtricsErro
 
 LOGGER = get_logger()
 REQUEST_TIMEOUT = 300
+MAX_POLL_ATTEMPTS = 60
+POLL_INTERVAL = 5  # seconds between status checks
+
 
 def raise_for_error(response: requests.Response) -> None:
-    """Raises the associated response exception. Takes in a response object,
-    checks the status code, and throws the associated exception based on the
-    status code.
-
-    :param resp: requests.Response object
-    """
+    """Raise the appropriate exception for non-2xx responses."""
     try:
         response_json = response.json()
     except Exception:
@@ -29,21 +27,18 @@ def raise_for_error(response: requests.Response) -> None:
             error_message = ERROR_CODE_EXCEPTION_MAPPING.get(
                 response.status_code, {}
             ).get("message", "Unknown Error")
-            message = f"HTTP-error-code: {response.status_code}, Error: {response_json.get('message', error_message)}"
+            message = (
+                f"HTTP-error-code: {response.status_code}, "
+                f"Error: {response_json.get('message', error_message)}"
+            )
         exc = ERROR_CODE_EXCEPTION_MAPPING.get(response.status_code, {}).get(
             "raise_exception", QualtricsError
         )
         raise exc(message, response) from None
 
+
 class Client:
-    """
-    A Wrapper class.
-    ~~~
-    Performs:
-     - Authentication
-     - Response parsing
-     - HTTP Error handling and retry
-    """
+    """HTTP client for the Qualtrics API (X-API-TOKEN auth)."""
 
     def __init__(self, config: Mapping[str, Any]) -> None:
         self.config = config
@@ -99,24 +94,57 @@ class Client:
             ConnectionError,
             ChunkedEncodingError,
             Timeout,
-            QualtricsBackoffError
+            QualtricsBackoffError,
         ),
-        max_tries=5,
-        factor=2,
+        max_tries=8,
+        factor=3,
     )
-    def __make_request(
-        self, method: str, endpoint: str, **kwargs
-    ) -> Optional[Mapping[Any, Any]]:
-        """Performs HTTP Operations."""
-        method = method.upper()
-        with metrics.http_request_timer(endpoint):
-            if method in ("GET", "POST"):
-                if method == "GET":
-                    kwargs.pop("data", None)
-                response = self._session.request(method, endpoint, **kwargs)
-                raise_for_error(response)
-            else:
-                raise ValueError(f"Unsupported method: {method}")
+    def _make_request(
+        self, method: str, url: str, **kwargs
+    ) -> requests.Response:
+        """Low-level request with retry/backoff."""
+        kwargs.setdefault("headers", self._get_headers())
+        kwargs.setdefault("timeout", self.request_timeout)
+        with metrics.http_request_timer(url):
+            response = self._session.request(method.upper(), url, **kwargs)
+        if response.status_code == 429:
+            raise QualtricsBackoffError("Rate limited (429)")
+        raise_for_error(response)
+        return response
 
-        return response.json()
+    def get(self, path: str, params: Optional[Dict] = None, full_url: Optional[str] = None) -> Any:
+        """GET request. Uses full_url when provided (for next-page URLs)."""
+        url = full_url or f"{self.base_url}/{path}"
+        return self._make_request("GET", url, params=params).json()
+
+    def post(self, path: str, payload: Optional[Dict] = None, full_url: Optional[str] = None) -> Any:
+        """POST request with JSON body."""
+        url = full_url or f"{self.base_url}/{path}"
+        return self._make_request("POST", url, json=payload).json()
+
+    def get_file(self, path: str, full_url: Optional[str] = None) -> requests.Response:
+        """GET request returning the raw response (for file downloads)."""
+        url = full_url or f"{self.base_url}/{path}"
+        headers = dict(self._get_headers())
+        # remove Content-Type for binary downloads
+        headers.pop("Content-Type", None)
+        return self._make_request("GET", url, headers=headers)
+
+    def poll_export(
+        self,
+        status_path: str,
+        max_attempts: int = MAX_POLL_ATTEMPTS,
+        interval: int = POLL_INTERVAL,
+    ) -> Any:
+        """Poll an async export status endpoint until status == 'complete'."""
+        for attempt in range(max_attempts):
+            response = self.get(status_path)
+            status = (response.get("result") or {}).get("status", "")
+            LOGGER.info("Export %s attempt %d/%d: %s", status_path, attempt + 1, max_attempts, status)
+            if status == "complete":
+                return response
+            if status in ("failed", "cancelled"):
+                raise QualtricsError(f"Export failed with status: {status}")
+            time.sleep(interval)
+        raise QualtricsError(f"Export did not complete after {max_attempts} attempts")
 

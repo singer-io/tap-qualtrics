@@ -7,9 +7,6 @@ LOGGER = singer.get_logger()
 
 
 def update_currently_syncing(state: Dict, stream_name: str) -> None:
-    """
-    Update currently_syncing in state and write it
-    """
     if not stream_name and singer.get_currently_syncing(state):
         del state["currently_syncing"]
     else:
@@ -17,51 +14,55 @@ def update_currently_syncing(state: Dict, stream_name: str) -> None:
     singer.write_state(state)
 
 
-def write_schema(stream, client, streams_to_sync, catalog) -> None:
-    """
-    Write schema for stream and its children
-    """
-    if stream.is_selected():
-        stream.write_schema()
-
-    for child in stream.children:
-        child_obj = STREAMS[child](client, catalog.get_stream(child))
-        write_schema(child_obj, client, streams_to_sync, catalog)
-        if child in streams_to_sync:
+def _attach_children(stream, streams_to_sync: list, catalog: singer.Catalog, client: Client) -> None:
+    """Recursively attach selected child stream objects to a parent stream."""
+    for child_name in stream.children:
+        if child_name not in STREAMS:
+            continue
+        child_entry = catalog.get_stream(child_name)
+        if child_entry is None:
+            continue
+        child_obj = STREAMS[child_name](client=client, catalog_entry=child_entry)
+        if child_name in streams_to_sync or child_obj.parent:
+            if child_obj.is_selected() or child_name in streams_to_sync:
+                child_obj.write_schema()
+            _attach_children(child_obj, streams_to_sync, catalog, client)
             stream.child_to_sync.append(child_obj)
 
 
-def sync(client: Client, config: Dict, catalog: singer.Catalog, state) -> None:
-    """
-    Sync selected streams from catalog
-    """
-
-    streams_to_sync = []
-    for stream in catalog.get_selected_streams(state):
-        streams_to_sync.append(stream.stream)
-    LOGGER.info("selected_streams: {}".format(streams_to_sync))
+def sync(client: Client, config: Dict, catalog: singer.Catalog, state: Dict) -> None:
+    streams_to_sync = [s.stream for s in catalog.get_selected_streams(state)]
+    LOGGER.info("Selected streams: %s", streams_to_sync)
 
     last_stream = singer.get_currently_syncing(state)
-    LOGGER.info("last/currently syncing stream: {}".format(last_stream))
+    LOGGER.info("Currently syncing: %s", last_stream)
 
     with singer.Transformer() as transformer:
         for stream_name in streams_to_sync:
-
-            stream = STREAMS[stream_name](client, catalog.get_stream(stream_name))
-            if stream.parent:
-                if stream.parent not in streams_to_sync:
-                    streams_to_sync.append(stream.parent)
+            if stream_name not in STREAMS:
+                LOGGER.warning("Stream %s not in STREAMS registry – skipping", stream_name)
                 continue
 
-            write_schema(stream, client, streams_to_sync, catalog)
-            LOGGER.info("START Syncing: {}".format(stream_name))
+            stream_entry = catalog.get_stream(stream_name)
+            if stream_entry is None:
+                continue
+
+            stream = STREAMS[stream_name](client=client, catalog_entry=stream_entry)
+
+            # Skip child-only streams; they are synced via their parent
+            if stream.parent and stream.parent in streams_to_sync:
+                continue
+
+            _attach_children(stream, streams_to_sync, catalog, client)
+
+            stream.write_schema()
+            LOGGER.info("START Syncing: %s", stream_name)
             update_currently_syncing(state, stream_name)
-            total_records = stream.sync(state=state, transformer=transformer)
+
+            total = stream.sync(state=state, transformer=transformer)
+            singer.write_state(state)
 
             update_currently_syncing(state, None)
-            LOGGER.info(
-                "FINISHED Syncing: {}, total_records: {}".format(
-                    stream_name, total_records
-                )
-            )
+            LOGGER.info("FINISHED Syncing: %s – %s records", stream_name, total)
+
 

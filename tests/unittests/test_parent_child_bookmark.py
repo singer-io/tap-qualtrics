@@ -1,94 +1,70 @@
+"""Tests for parent-child stream bookmark propagation via sync.py."""
 import unittest
-from unittest.mock import patch, MagicMock
-from tap_qualtrics.streams.abstracts import ParentBaseStream
+from unittest.mock import MagicMock, patch
+from tap_qualtrics.streams.abstracts import FullTableStream, IncrementalStream
 
-class ConcreteParentBaseStream(ParentBaseStream):
-    @property
-    def key_properties(self):
-        return ["id"]
 
-    @property
-    def replication_keys(self):
-        return ["updated_at"]
+class ConcreteParent(FullTableStream):
+    tap_stream_id = "parent_stream"
+    key_properties = ["id"]
+    replication_method = "FULL_TABLE"
+    data_key = "result.elements"
+    path = "parent-resource"
+    children = ["child_stream"]
 
-    @property
-    def replication_method(self):
-        return "INCREMENTAL"
 
-    @property
-    def tap_stream_id(self):
-        return "parent_stream"
+class ConcreteChild(FullTableStream):
+    tap_stream_id = "child_stream"
+    key_properties = ["id"]
+    replication_method = "FULL_TABLE"
+    data_key = "result.elements"
+    parent = "parent_stream"
 
-class TestSync(unittest.TestCase):
-    @patch("tap_qualtrics.streams.abstracts.metadata.to_map")
-    def setUp(self, mock_to_map):
+    def get_records(self, parent_id=None):
+        parent_id_val = (parent_id or {}).get("id", "unknown")
+        yield {"id": f"child_of_{parent_id_val}"}
 
-        mock_catalog = MagicMock()
-        mock_catalog.schema.to_dict.return_value = {"key": "value"}
-        mock_catalog.metadata = "mock_metadata"
-        mock_to_map.return_value = {"metadata_key": "metadata_value"}
 
-        self.stream = ConcreteParentBaseStream(catalog=mock_catalog)
-        self.stream.child_to_sync = []
+def _make_entry():
+    entry = MagicMock()
+    entry.schema.to_dict.return_value = {"type": "object", "properties": {}, "additionalProperties": True}
+    entry.metadata = []
+    return entry
 
-    @patch("tap_qualtrics.streams.abstracts.ParentBaseStream.is_selected", return_value=True)
-    @patch("tap_qualtrics.streams.abstracts.ParentBaseStream.get_bookmark", return_value=100)
-    def test_get_bookmark_parent_only_selected(self, mock_get_bookmark, mock_is_selected):
 
-        state = {}
-        result = self.stream.get_bookmark(state, "parent_stream")
-        mock_get_bookmark.assert_called_once_with(state, "parent_stream")
-        self.assertEqual(result, 100)
+class TestParentChildSync(unittest.TestCase):
 
-    @patch("tap_qualtrics.streams.abstracts.BaseStream.is_selected", return_value=False)
-    @patch("tap_qualtrics.streams.abstracts.IncrementalStream.get_bookmark", return_value = 100)
-    def test_get_bookmark_parent_only_but_not_selected(self, mock_get_bookmark, mock_is_selected):
-
-        state = {}
-        result = self.stream.get_bookmark(state, "parent_stream")
-        self.assertEqual(result, None)
-
+    @patch("tap_qualtrics.streams.abstracts.write_record")
     @patch("tap_qualtrics.streams.abstracts.BaseStream.is_selected", return_value=True)
-    @patch("tap_qualtrics.streams.abstracts.IncrementalStream.get_bookmark", side_effect = [100, 50, 75])
-    def test_get_bookmark_with_children(self, mock_get_bookmark, mock_is_selected):
+    def test_child_sync_called_per_parent_record(self, mock_selected, mock_write_record):
+        parent = ConcreteParent(client=MagicMock(), catalog_entry=_make_entry())
+        parent.client.get.return_value = {
+            "result": {"elements": [{"id": "P1"}, {"id": "P2"}], "nextPage": None}
+        }
 
-        child1 = MagicMock()
-        child1.tap_stream_id = "child_stream_1"
-        child2 = MagicMock()
-        child2.tap_stream_id = "child_stream_2"
-        self.stream.child_to_sync = [child1, child2]
+        child = ConcreteChild(client=MagicMock(), catalog_entry=_make_entry())
+        parent.child_to_sync = [child]
 
-        state = {}
-        result = self.stream.get_bookmark(state, "parent_stream")
+        transformer = MagicMock()
+        transformer.transform.side_effect = lambda r, *a, **kw: r
+        parent.sync(state={}, transformer=transformer)
 
-        self.assertEqual(mock_get_bookmark.call_count, 3)
-        mock_get_bookmark.assert_any_call(state, "parent_stream")
-        mock_get_bookmark.assert_any_call(
-            state, "child_stream_1", key="parent_stream_updated_at"
-        )
-        mock_get_bookmark.assert_any_call(
-            state, "child_stream_2", key="parent_stream_updated_at"
-        )
-        self.assertEqual(result, 50) 
+        written_ids = [c.args[1]["id"] for c in mock_write_record.call_args_list]
+        assert "child_of_P1" in written_ids
+        assert "child_of_P2" in written_ids
 
-    @patch("tap_qualtrics.streams.abstracts.BaseStream.is_selected", return_value=False)
-    @patch("tap_qualtrics.streams.abstracts.IncrementalStream.get_bookmark", side_effect = [75, 50])
-    def test_get_bookmark_only_children_selected(self, mock_get_bookmark, mock_is_selected):
+    @patch("tap_qualtrics.streams.abstracts.write_record")
+    @patch("tap_qualtrics.streams.abstracts.BaseStream.is_selected", return_value=True)
+    def test_parent_emits_own_records(self, mock_selected, mock_write_record):
+        parent = ConcreteParent(client=MagicMock(), catalog_entry=_make_entry())
+        parent.client.get.return_value = {
+            "result": {"elements": [{"id": "P1"}], "nextPage": None}
+        }
+        parent.child_to_sync = []
 
-        child1 = MagicMock()
-        child1.tap_stream_id = "child_stream_1"
-        child2 = MagicMock()
-        child2.tap_stream_id = "child_stream_2"
-        self.stream.child_to_sync = [child1, child2]
+        transformer = MagicMock()
+        transformer.transform.side_effect = lambda r, *a, **kw: r
+        parent.sync(state={}, transformer=transformer)
 
-        state = {}
-        result = self.stream.get_bookmark(state, "parent_stream")
+        mock_write_record.assert_called_once_with("parent_stream", {"id": "P1"})
 
-        self.assertEqual(mock_get_bookmark.call_count, 2)
-        mock_get_bookmark.assert_any_call(
-            state, "child_stream_1", key="parent_stream_updated_at"
-        )
-        mock_get_bookmark.assert_any_call(
-            state, "child_stream_2", key="parent_stream_updated_at"
-        )
-        self.assertEqual(result, 50)

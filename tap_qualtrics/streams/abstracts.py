@@ -1,302 +1,292 @@
+import time
 from abc import ABC, abstractmethod
-import json
-from typing import Any, Dict, Tuple, List, Iterator
+from typing import Any, Dict, Iterator, List, Optional
+
 from singer import (
     Transformer,
     get_bookmark,
     get_logger,
+    metadata,
     metrics,
     write_bookmark,
     write_record,
     write_schema,
-    metadata
 )
 
 LOGGER = get_logger()
 
 
+def _get_nested(data: Any, key_path: str) -> Any:
+    """Navigate a dot-separated path through a nested dict."""
+    for key in key_path.split("."):
+        if isinstance(data, dict):
+            data = data.get(key)
+        else:
+            return None
+    return data
+
+
 class BaseStream(ABC):
-    """
-    A Base Class providing structure and boilerplate for generic streams
-    and required attributes for any kind of stream
-    ~~~
-    Provides:
-     - Basic Attributes (stream_name,replication_method,key_properties)
-     - Helper methods for catalog generation
-     - `sync` and `get_records` method for performing sync
-    """
+    """Abstract base class for all Singer streams."""
 
-    url_endpoint = ""
-    path = ""
-    page_size = 50
-    next_page_key = "result.nextPage"
-    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-    children = []
-    parent = ""
-    data_key = ""
-    parent_bookmark_key = ""
-    http_method = "POST"
+    tap_stream_id: str = ""
+    key_properties: List[str] = []
+    replication_method: str = "FULL_TABLE"
+    replication_keys: List[str] = []
+    http_method: str = "GET"
+    # dot-path into the response JSON where the list of records lives
+    data_key: str = "result.elements"
+    # dot-path into the response JSON for the next-page URL/token
+    next_page_key: str = "result.nextPage"
+    page_size: int = 100
+    children: List[str] = []
+    parent: Optional[str] = None
 
-    def __init__(self, client=None, catalog=None) -> None:
+    def __init__(self, client=None, catalog_entry=None) -> None:
         self.client = client
-        self.catalog = catalog
-        self.schema = catalog.schema.to_dict()
-        self.metadata = metadata.to_map(catalog.metadata)
-        self.child_to_sync = []
-        self.params = {}
-        self.data_payload = {}
+        self.catalog_entry = catalog_entry
+        if catalog_entry:
+            self.schema = catalog_entry.schema.to_dict()
+            self.mdata = metadata.to_map(catalog_entry.metadata)
+        else:
+            self.schema = {}
+            self.mdata = {}
+        self.child_to_sync: List["BaseStream"] = []
 
-    @property
-    @abstractmethod
-    def tap_stream_id(self) -> str:
-        """Unique identifier for the stream.
-
-        This is allowed to be different from the name of the stream, in
-        order to allow for sources that have duplicate stream names.
-        """
-
-    @property
-    @abstractmethod
-    def replication_method(self) -> str:
-        """Defines the sync mode of a stream."""
-
-    @property
-    @abstractmethod
-    def replication_keys(self) -> List:
-        """Defines the replication key for incremental sync mode of a
-        stream."""
-
-    @property
-    @abstractmethod
-    def key_properties(self) -> Tuple[str, str]:
-        """List of key properties for stream."""
-
-    def is_selected(self):
-        return metadata.get(self.metadata, (), "selected")
+    # ------------------------------------------------------------------ #
+    # Abstract interface                                                   #
+    # ------------------------------------------------------------------ #
 
     @abstractmethod
-    def sync(
-        self,
-        state: Dict,
-        transformer: Transformer,
-        parent_obj: Dict = None,
-    ) -> Dict:
-        """
-        Performs a replication sync for the stream.
-        ~~~
-        Args:
-         - state (dict): represents the state file for the tap.
-         - transformer (object): A Object of the singer.transformer class.
-         - parent_obj (dict): The parent object for the stream.
+    def sync(self, state: Dict, transformer: Transformer, parent_id: Any = None) -> int:
+        """Perform a full sync of this stream and return the record count."""
 
-        Returns:
-         - bool: The return value. True for success, False otherwise.
+    # ------------------------------------------------------------------ #
+    # Helpers                                                              #
+    # ------------------------------------------------------------------ #
 
-        Docs:
-         - https://github.com/singer-io/getting-started/blob/master/docs/SYNC_MODE.md
-        """
-
-
-    def get_records(self) -> Iterator:
-        """Interacts with api client interaction and pagination."""
-        self.params[""] = self.page_size
-        next_page = 1
-        while next_page:
-            response = self.client.make_request(
-                self.http_method,
-                self.url_endpoint,
-                self.params,
-                self.headers,
-                body=json.dumps(self.data_payload),
-                path=self.path
-            )
-            raw_records = response.get(self.data_key, [])
-            next_page = response.get(self.next_page_key)
-
-            self.params[self.next_page_key] = next_page
-            yield from raw_records
+    def is_selected(self) -> bool:
+        return bool(metadata.get(self.mdata, (), "selected"))
 
     def write_schema(self) -> None:
-        """
-        Write a schema message.
-        """
         try:
             write_schema(self.tap_stream_id, self.schema, self.key_properties)
         except OSError as err:
-            LOGGER.error(
-                "OS Error while writing schema for: {}".format(self.tap_stream_id)
-            )
+            LOGGER.error("OS Error writing schema for: %s", self.tap_stream_id)
             raise err
 
-    def update_params(self, **kwargs) -> None:
+    # ------------------------------------------------------------------ #
+    # Pagination                                                           #
+    # ------------------------------------------------------------------ #
+
+    def _paginate(self, path: str, params: Optional[Dict] = None) -> Iterator[Any]:
+        """Yield records from a paginated GET endpoint.
+
+        Qualtrics returns a full URL in ``result.nextPage``; we follow it
+        until it is null.
         """
-        Update params for the stream
-        """
-        self.params.update(kwargs)
+        params = dict(params or {})
+        params.setdefault("pageSize", self.page_size)
+        next_url: Optional[str] = None
 
-    def update_data_payload(self, **kwargs) -> None:
-        """
-        Update JSON body for the stream
-        """
-        self.data_payload.update(kwargs)
+        while True:
+            if next_url:
+                response = self.client.get(path, full_url=next_url)
+            else:
+                response = self.client.get(path, params=params)
 
-    def modify_object(self, record: Dict, parent_record: Dict = None) -> Dict:
-        """
-        Modify the record before writing to the stream
-        """
-        return record
+            records = _get_nested(response, self.data_key)
+            if isinstance(records, list):
+                yield from records
+            elif isinstance(records, dict):
+                yield records
 
-    def get_url_endpoint(self, parent_obj: Dict = None) -> str:
-        """
-        Get the URL endpoint for the stream
-        """
-        return self.url_endpoint or f"{self.client.base_url}/{self.path}"
-
-
-class IncrementalStream(BaseStream):
-    """Base Class for Incremental Stream."""
-
-
-    def get_bookmark(self, state: dict, stream: str, key: Any = None) -> int:
-        """A wrapper for singer.get_bookmark to deal with compatibility for
-        bookmark values or start values."""
-        return get_bookmark(
-            state,
-            stream,
-            key or self.replication_keys[0],
-            self.client.config["start_date"],
-        )
-
-    def write_bookmark(self, state: dict, stream: str, key: Any = None, value: Any = None) -> Dict:
-        """A wrapper for singer.get_bookmark to deal with compatibility for
-        bookmark values or start values."""
-        if not (key or self.replication_keys):
-            return state
-
-        current_bookmark = get_bookmark(state, stream, key or self.replication_keys[0], self.client.config["start_date"])
-        value = max(current_bookmark, value)
-        return write_bookmark(
-            state, stream, key or self.replication_keys[0], value
-        )
-
-
-    def sync(
-        self,
-        state: Dict,
-        transformer: Transformer,
-        parent_obj: Dict = None,
-    ) -> Dict:
-        """Implementation for `type: Incremental` stream."""
-        bookmark_date = self.get_bookmark(state, self.tap_stream_id)
-        current_max_bookmark_date = bookmark_date
-        self.update_params(updated_since=bookmark_date)
-        self.update_data_payload(parent_obj)
-        self.url_endpoint = self.get_url_endpoint(parent_obj)
-
-        with metrics.record_counter(self.tap_stream_id) as counter:
-            for record in self.get_records():
-                record = self.modify_object(record, parent_obj)
-                transformed_record = transformer.transform(
-                    record, self.schema, self.metadata
-                )
-
-                record_bookmark = transformed_record[self.replication_keys[0]]
-                if record_bookmark >= bookmark_date:
-                    if self.is_selected():
-                        write_record(self.tap_stream_id, transformed_record)
-                        counter.increment()
-
-                    current_max_bookmark_date = max(
-                        current_max_bookmark_date, record_bookmark
-                    )
-
-                    for child in self.child_to_sync:
-                        child.sync(state=state, transformer=transformer, parent_obj=record)
-
-            state = self.write_bookmark(state, self.tap_stream_id, value=current_max_bookmark_date)
-            return counter.value
+            next_url = _get_nested(response, self.next_page_key)
+            if not next_url:
+                break
 
 
 class FullTableStream(BaseStream):
-    """Base Class for Incremental Stream."""
+    """Full-table stream: dumps all records on every sync."""
 
-    replication_keys = []
+    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
+        """Override in subclasses to customise how records are fetched."""
+        path = self._build_path(parent_id)
+        yield from self._paginate(path)
 
-    def sync(
-        self,
-        state: Dict,
-        transformer: Transformer,
-        parent_obj: Dict = None,
-    ) -> Dict:
-        """Abstract implementation for `type: Fulltable` stream."""
-        self.url_endpoint = self.get_url_endpoint(parent_obj)
-        self.update_data_payload(parent_obj)
+    def _build_path(self, parent_id: Any = None) -> str:
+        """Return the URL path for this stream, optionally parameterised."""
+        return self.path  # subclasses override or format with parent_id
+
+    def sync(self, state: Dict, transformer: Transformer, parent_id: Any = None) -> int:
         with metrics.record_counter(self.tap_stream_id) as counter:
-            for record in self.get_records():
-                transformed_record = transformer.transform(
-                    record, self.schema, self.metadata
-                )
+            for record in self.get_records(parent_id):
+                transformed = transformer.transform(record, self.schema, self.mdata)
                 if self.is_selected():
-                    write_record(self.tap_stream_id, transformed_record)
+                    write_record(self.tap_stream_id, transformed)
                     counter.increment()
-
                 for child in self.child_to_sync:
-                    child.sync(state=state, transformer=transformer, parent_obj=record)
+                    child.sync(state=state, transformer=transformer, parent_id=record)
+        return counter.value
 
-            return counter.value
 
+class IncrementalStream(BaseStream):
+    """Incremental stream: uses a bookmark to track progress."""
 
-class ParentBaseStream(IncrementalStream):
-    """Base Class for Parent Stream."""
-
-    def get_bookmark(self, state: Dict, stream: str, key: Any = None) -> int:
-        """A wrapper for singer.get_bookmark to deal with compatibility for
-        bookmark values or start values."""
-
-        min_parent_bookmark = (
-            super().get_bookmark(state, stream) if self.is_selected() else None
+    def get_bookmark(self, state: Dict, key: Any = None) -> str:
+        return get_bookmark(
+            state,
+            self.tap_stream_id,
+            key or self.replication_keys[0],
+            self.client.start_date,
         )
-        for child in self.child_to_sync:
-            bookmark_key = f"{self.tap_stream_id}_{self.replication_keys[0]}"
-            child_bookmark = super().get_bookmark(
-                state, child.tap_stream_id, key=bookmark_key
-            )
-            min_parent_bookmark = (
-                min(min_parent_bookmark, child_bookmark)
-                if min_parent_bookmark
-                else child_bookmark
-            )
 
-        return min_parent_bookmark
+    def write_bookmark(self, state: Dict, value: str, key: Any = None) -> Dict:
+        bk = key or self.replication_keys[0]
+        current = get_bookmark(state, self.tap_stream_id, bk, self.client.start_date)
+        value = max(current, value)
+        return write_bookmark(state, self.tap_stream_id, bk, value)
 
-    def write_bookmark(
-        self, state: Dict, stream: str, key: Any = None, value: Any = None
-    ) -> Dict:
-        """A wrapper for singer.get_bookmark to deal with compatibility for
-        bookmark values or start values."""
-        if self.is_selected():
-            super().write_bookmark(state, stream, value=value)
+    def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[Dict]:
+        path = self._build_path(parent_id)
+        params: Dict = {}
+        if bookmark:
+            params["startDate"] = bookmark
+        yield from self._paginate(path, params)
 
-        for child in self.child_to_sync:
-            bookmark_key = f"{self.tap_stream_id}_{self.replication_keys[0]}"
-            super().write_bookmark(
-                state, child.tap_stream_id, key=bookmark_key, value=value
-            )
+    def _build_path(self, parent_id: Any = None) -> str:
+        return self.path
 
-        return state
+    def sync(self, state: Dict, transformer: Transformer, parent_id: Any = None) -> int:
+        bookmark = self.get_bookmark(state)
+        max_bk = bookmark
+        with metrics.record_counter(self.tap_stream_id) as counter:
+            for record in self.get_records(parent_id, bookmark):
+                transformed = transformer.transform(record, self.schema, self.mdata)
+                record_bk = transformed.get(self.replication_keys[0], "")
+                if record_bk >= bookmark:
+                    if self.is_selected():
+                        write_record(self.tap_stream_id, transformed)
+                        counter.increment()
+                    if record_bk > max_bk:
+                        max_bk = record_bk
+                    for child in self.child_to_sync:
+                        child.sync(state=state, transformer=transformer, parent_id=record)
+        state = self.write_bookmark(state, max_bk)
+        return counter.value
 
 
-class ChildBaseStream(IncrementalStream):
-    """Base Class for Child Stream."""
+# ------------------------------------------------------------------ #
+# Specialised base classes                                             #
+# ------------------------------------------------------------------ #
 
-    def get_url_endpoint(self, parent_obj=None):
-        """Prepare URL endpoint for child streams."""
-        return f"{self.client.base_url}/{self.path.format(parent_obj['id'])}"
+class SurveyChildStream(FullTableStream):
+    """Stream whose records are fetched once per survey."""
 
-    def get_bookmark(self, state: Dict, stream: str, key: Any = None) -> int:
-        """Singleton bookmark value for child streams."""
-        if not self.bookmark_value:
-            self.bookmark_value = super().get_bookmark(state, stream)
+    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
+        survey_id = (parent_id or {}).get("id") or parent_id
+        if not survey_id:
+            return
+        path = self.path.format(survey_id=survey_id)
+        yield from self._paginate(path)
 
-        return self.bookmark_value
+
+class DirectoryChildStream(FullTableStream):
+    """Stream whose records are fetched once per directory."""
+
+    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
+        directory_id = (parent_id or {}).get("directoryId") or parent_id
+        if not directory_id:
+            return
+        path = self.path.format(directory_id=directory_id)
+        yield from self._paginate(path)
+
+
+class MailingListChildStream(FullTableStream):
+    """Stream whose records are fetched once per (directory, mailing-list) pair."""
+
+    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
+        if not parent_id:
+            return
+        directory_id = parent_id.get("_directory_id", "")
+        mailing_list_id = parent_id.get("mailingListId", "")
+        if not directory_id or not mailing_list_id:
+            return
+        path = self.path.format(directory_id=directory_id, mailing_list_id=mailing_list_id)
+        yield from self._paginate(path)
+
+
+class GroupChildStream(FullTableStream):
+    """Stream whose records are fetched once per group."""
+
+    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
+        group_id = (parent_id or {}).get("id") or parent_id
+        if not group_id:
+            return
+        path = self.path.format(group_id=group_id)
+        yield from self._paginate(path)
+
+
+class LibraryChildStream(FullTableStream):
+    """Stream whose records are fetched once per library."""
+
+    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
+        library_id = (parent_id or {}).get("libraryId") or parent_id
+        if not library_id:
+            return
+        path = self.path.format(library_id=library_id)
+        yield from self._paginate(path)
+
+
+class SampleChildStream(FullTableStream):
+    """Stream whose records are fetched once per (directory, sample) pair."""
+
+    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
+        if not parent_id:
+            return
+        directory_id = parent_id.get("_directory_id", "")
+        sample_id = parent_id.get("sampleId", parent_id.get("id", ""))
+        if not directory_id or not sample_id:
+            return
+        path = self.path.format(directory_id=directory_id, sample_id=sample_id)
+        yield from self._paginate(path)
+
+
+class SegmentChildStream(FullTableStream):
+    """Stream whose records are fetched once per (directory, segment) pair."""
+
+    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
+        if not parent_id:
+            return
+        directory_id = parent_id.get("_directory_id", "")
+        segment_id = parent_id.get("segmentId", "")
+        if not directory_id or not segment_id:
+            return
+        path = self.path.format(directory_id=directory_id, segment_id=segment_id)
+        yield from self._paginate(path)
+
+
+class ContactChildStream(FullTableStream):
+    """Stream whose records are fetched once per (directory, contact) pair."""
+
+    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
+        if not parent_id:
+            return
+        directory_id = parent_id.get("_directory_id", "")
+        contact_id = parent_id.get("contactId", "")
+        if not directory_id or not contact_id:
+            return
+        path = self.path.format(directory_id=directory_id, contact_id=contact_id)
+        yield from self._paginate(path)
+
+
+class TicketChildStream(FullTableStream):
+    """Stream whose records are fetched once per ticket."""
+
+    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
+        ticket_id = (parent_id or {}).get("ticketId") or (parent_id or {}).get("id") or parent_id
+        if not ticket_id:
+            return
+        path = self.path.format(ticket_id=ticket_id)
+        yield from self._paginate(path)
 

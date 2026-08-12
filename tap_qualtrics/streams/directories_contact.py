@@ -1,10 +1,23 @@
-from tap_qualtrics.streams.abstracts import FullTableStream
+from tap_qualtrics.streams.abstracts import DirectoryChildStream
 
-class DirectoriesContact(FullTableStream):
-    tap_stream_id = "directories_contact"
+
+class Contacts(DirectoryChildStream):
+    """Contacts in a directory (page size 500); has contact_transactions child."""
+    tap_stream_id = "contacts"
     key_properties = ["contactId"]
     replication_method = "FULL_TABLE"
-    data_key = "result"
-    path = "directories/{directory_id}/contacts/{contactId}"
-    path = "directories_contacts"
+    data_key = "result.elements"
+    path = "directories/{directory_id}/contacts"
+    page_size = 500
+    parent = "directories"
+    children = ["contact_transactions"]
+
+    def get_records(self, parent_id=None):
+        directory_id = (parent_id or {}).get("directoryId") or parent_id
+        if not directory_id:
+            return
+        path = self.path.format(directory_id=directory_id)
+        for record in self._paginate(path, {"pageSize": self.page_size}):
+            record["_directory_id"] = directory_id
+            yield record
 

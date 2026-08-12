@@ -1,10 +1,11 @@
-from tap_qualtrics.streams.abstracts import FullTableStream
+from tap_qualtrics.streams.abstracts import GroupChildStream
 
-class GroupUsers(FullTableStream):
+
+class GroupUsers(GroupChildStream):
     tap_stream_id = "group_users"
     key_properties = ["id"]
     replication_method = "FULL_TABLE"
     data_key = "result.elements"
-    path = "groups/{groupId}/members"
-    path = "groups"
+    path = "groups/{group_id}/members"
+    parent = "groups"
 

@@ -1,10 +1,12 @@
-from tap_qualtrics.streams.abstracts import FullTableStream
+from tap_qualtrics.streams.abstracts import SurveyChildStream
 
-class Questions(FullTableStream):
-    tap_stream_id = "questions"
+
+class SurveyQuestions(SurveyChildStream):
+    tap_stream_id = "survey_questions"
     key_properties = ["QuestionID"]
     replication_method = "FULL_TABLE"
     data_key = "result.elements"
-    path = "/survey-definitions/{surveyId}/questions"
-    path = "survey"
+    path = "survey-definitions/{survey_id}/questions"
+    page_size = 100
+    parent = "surveys"
 

@@ -1,43 +1,54 @@
 {
     "type": "object",
     "properties": {
-        "contactCount": {
-            "type": [
-                "null",
-                "integer"
-            ]
-        },
-        "mailingListId": {
+        "contactId": {
             "type": [
                 "null",
                 "string"
             ]
         },
-        "name": {
+        "firstName": {
             "type": [
                 "null",
                 "string"
             ]
         },
-        "lastModifiedDate": {
+        "lastName": {
             "type": [
                 "null",
                 "string"
-            ],
-            "format": "date-time"
+            ]
         },
-        "creationDate": {
+        "email": {
             "type": [
                 "null",
                 "string"
-            ],
-            "format": "date-time"
+            ]
         },
-        "ownerId": {
+        "phone": {
             "type": [
                 "null",
                 "string"
+            ]
+        },
+        "extRef": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "language": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "unsubscribed": {
+            "type": [
+                "null",
+                "boolean"
             ]
         }
-    }
+    },
+    "additionalProperties": true
 }

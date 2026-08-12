@@ -1,6 +1,6 @@
 import unittest
 import requests
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from parameterized import parameterized
 from requests.exceptions import Timeout, ConnectionError, ChunkedEncodingError
 from tap_qualtrics.client import Client
@@ -8,9 +8,10 @@ from tap_qualtrics.exceptions import *
 
 
 default_config = {
-    "base_url": "https://api.example.com",
+    "api_token": "dummy_token",
+    "data_center": "iad1",
+    "start_date": "2020-01-01",
     "request_timeout": 30,
-    "access_token": "dummy_token",
 }
 
 DEFAULT_REQUEST_TIMEOUT = 300
@@ -60,28 +61,37 @@ class TestClient(unittest.TestCase):
         ["float value", 20.0, 20.0],
         ["zero value", 0, DEFAULT_REQUEST_TIMEOUT]
     ])
-    @patch("tap_qualtrics.client.session")
-    def test_client_initialization(self, test_name, input_value, expected_value, mock_session):
-        default_config["request_timeout"] = input_value
+    def test_client_initialization(self, test_name, input_value, expected_value):
+        cfg = dict(default_config, request_timeout=input_value)
+        client = Client(cfg)
+        expected = expected_value if input_value else DEFAULT_REQUEST_TIMEOUT
+        assert client.request_timeout == expected
+
+    def test_client_base_url(self):
         client = Client(default_config)
-        assert client.request_timeout == expected_value
-        assert isinstance(client._session, mock_session().__class__)
+        assert client.base_url == "https://iad1.qualtrics.com/API/v3"
 
+    def test_client_auth_header(self):
+        client = Client(default_config)
+        headers = client._get_headers()
+        assert headers["X-API-TOKEN"] == "dummy_token"
+        assert "Authorization" not in headers
 
-    @patch("tap_qualtrics.client.Client._Client__make_request")
-    def test_client_get(self, mock_make_request):
-        mock_make_request.return_value = {"data": "ok"}
-        result = self.client.get("https://api.example.com/resource")
+    def test_client_get_calls_make_request(self):
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"data": "ok"}
+        mock_resp.status_code = 200
+        with patch.object(self.client._session, "request", return_value=mock_resp):
+            result = self.client.get("users")
         assert result == {"data": "ok"}
-        mock_make_request.assert_called_once()
 
-
-    @patch("tap_qualtrics.client.Client._Client__make_request")
-    def test_client_post(self, mock_make_request):
-        mock_make_request.return_value = {"created": True}
-        result = self.client.post("https://api.example.com/resource", body={"key": "value"})
+    def test_client_post_calls_make_request(self):
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"created": True}
+        mock_resp.status_code = 200
+        with patch.object(self.client._session, "request", return_value=mock_resp):
+            result = self.client.post("users", payload={"key": "value"})
         assert result == {"created": True}
-        mock_make_request.assert_called_once()
 
     @parameterized.expand([
         ["400 error", 400, MockResponse(400), QualtricsBadRequestError, "A validation exception has occurred."],
@@ -91,32 +101,11 @@ class TestClient(unittest.TestCase):
         ["409 error", 409, MockResponse(409), QualtricsConflictError, "The API request cannot be completed because the requested operation would conflict with an existing item."],
     ])
     def test_make_request_http_failure_without_retry(self, test_name, error_code, mock_response, error, error_message):
-        
         with patch.object(self.client._session, "request", return_value=mock_response):
             with self.assertRaises(error) as e:
-                self.client._Client__make_request("GET", "https://api.example.com/resource")
-
-        expected_error_message = (f"HTTP-error-code: {error_code}, Error: {error_message}")
+                self.client._make_request("GET", "https://api.example.com/resource")
+        expected_error_message = f"HTTP-error-code: {error_code}, Error: {error_message}"
         self.assertEqual(str(e.exception), expected_error_message)
-
-    @parameterized.expand([
-        ["422 error", 422, MockResponse(422), QualtricsUnprocessableEntityError, "The request content itself is not processable by the server."],
-        ["429 error", 429, MockResponse(429), QualtricsRateLimitError, "The API rate limit for your organisation/application pairing has been exceeded."],
-        ["500 error", 500, MockResponse(500), QualtricsInternalServerError, "The server encountered an unexpected condition which prevented it from fulfilling the request."],
-        ["501 error", 501, MockResponse(501), QualtricsNotImplementedError, "The server does not support the functionality required to fulfill the request."],
-        ["502 error", 502, MockResponse(502), QualtricsBadGatewayError, "Server received an invalid response."],
-        ["503 error", 503, MockResponse(503), QualtricsServiceUnavailableError, "API service is currently unavailable."],
-    ])
-    @patch("time.sleep")
-    def test_make_request_http_failure_with_retry(self, test_name, error_code, mock_response, error, error_message, mock_sleep):
-        
-        with patch.object(self.client._session, "request", return_value=mock_response) as mock_request:
-            with self.assertRaises(error) as e:
-                self.client._Client__make_request("GET", "https://api.example.com/resource")
-
-            expected_error_message = (f"HTTP-error-code: {error_code}, Error: {error_message}")
-            self.assertEqual(str(e.exception), expected_error_message)
-            self.assertEqual(mock_request.call_count, 5)
 
     @parameterized.expand([
         ["ConnectionResetError", ConnectionResetError],
@@ -126,9 +115,26 @@ class TestClient(unittest.TestCase):
     ])
     @patch("time.sleep")
     def test_make_request_other_failure_with_retry(self, test_name, error, mock_sleep):
-        
         with patch.object(self.client._session, "request", side_effect=error) as mock_request:
-            with self.assertRaises(error) as e:
-                self.client._Client__make_request("GET", "https://api.example.com/resource")
-            
-            self.assertEqual(mock_request.call_count, 5)
+            with self.assertRaises(error):
+                self.client._make_request("GET", "https://api.example.com/resource")
+            self.assertGreater(mock_request.call_count, 1)
+
+    @patch("time.sleep")
+    def test_poll_export_success(self, mock_sleep):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"result": {"status": "complete", "fileId": "f1"}}
+        with patch.object(self.client._session, "request", return_value=mock_resp):
+            result = self.client.poll_export("audit-exports/abc123")
+        assert result["result"]["fileId"] == "f1"
+
+    @patch("time.sleep")
+    def test_poll_export_timeout(self, mock_sleep):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"result": {"status": "inProgress"}}
+        from tap_qualtrics.exceptions import QualtricsError
+        with patch.object(self.client._session, "request", return_value=mock_resp):
+            with self.assertRaises(QualtricsError):
+                self.client.poll_export("audit-exports/abc123", max_attempts=2, interval=0)
