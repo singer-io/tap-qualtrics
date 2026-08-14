@@ -1,12 +1,15 @@
+import base64
 import time
-from typing import Any, Dict, Mapping, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Mapping, Optional, Tuple
 
 import backoff
 import requests
-from requests.exceptions import Timeout, ConnectionError, ChunkedEncodingError
+from requests.exceptions import ChunkedEncodingError, ConnectionError, Timeout
 from singer import get_logger, metrics
 
-from tap_qualtrics.exceptions import ERROR_CODE_EXCEPTION_MAPPING, QualtricsError, QualtricsBackoffError
+from tap_qualtrics.exceptions import (ERROR_CODE_EXCEPTION_MAPPING,
+                                      QualtricsBackoffError, QualtricsError)
 
 LOGGER = get_logger()
 REQUEST_TIMEOUT = 300
@@ -38,28 +41,82 @@ def raise_for_error(response: requests.Response) -> None:
 
 
 class Client:
-    """HTTP client for the Qualtrics API (X-API-TOKEN auth)."""
+    """HTTP client for the Qualtrics API (OAuth2 client credentials auth)."""
 
     def __init__(self, config: Mapping[str, Any]) -> None:
         self.config = config
-        self._session = session()
-        self.base_url = "https://{dataCenter}.qualtrics.com/API/v3/"
+        self.data_center = config.get("dataCenter")
+        self._session = requests.Session()
+        self.base_url = f"https://{self.data_center}.qualtrics.com/API/v3/"
         config_request_timeout = config.get("request_timeout")
         self.request_timeout = float(config_request_timeout) if config_request_timeout else REQUEST_TIMEOUT
+        self.access_token = None
+        self.__expires = datetime.now(timezone.utc) - timedelta(seconds=10)
+        self.oauth_token_endpoint = f"https://{self.data_center}.qualtrics.com/oauth2/token"
 
     def __enter__(self):
-        self.check_api_credentials()
+        self._obtain_oauth_token()
         return self
 
     def __exit__(self, exception_type, exception_value, traceback):
         self._session.close()
 
+    def _get_headers(self) -> Dict[str, str]:
+        """Get default headers for API requests."""
+        return {
+            "Content-Type": "application/json"
+        }
+
     def check_api_credentials(self) -> None:
         pass
 
+    def _obtain_oauth_token(self) -> None:
+        """Obtain OAuth2 access token using client credentials flow."""
+        client_id = self.config.get("clientId")
+        client_secret = self.config.get("clientSecret")
+
+        if not client_id or not client_secret:
+            raise QualtricsError("Missing required OAuth2 credentials: clientId and clientSecret")
+
+        # Check if the token is still valid
+        if self.access_token and datetime.now(timezone.utc) < self.__expires:
+            LOGGER.info("Using cached OAuth2 access token")
+            return
+
+        # Encode credentials in Base64 for Basic auth
+        credentials = f"{client_id}:{client_secret}"
+        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+
+        headers = {
+            "Authorization": f"Basic {encoded_credentials}"
+        }
+
+        data = {
+            "grant_type": "client_credentials",
+            "scope": self.config.get("scope", "")
+        }
+
+        try:
+            response = self._session.post(self.oauth_token_endpoint, headers=headers, data=data, timeout=self.request_timeout)
+            if response.status_code != 200:
+                raise QualtricsError(f"Failed to obtain OAuth2 token: HTTP {response.status_code}")
+            token_response = response.json()
+            self.access_token = token_response.get("access_token")
+            if not self.access_token:
+                raise QualtricsError("No access_token in OAuth2 response")
+
+            LOGGER.info("Successfully obtained OAuth2 access token")
+
+            # Set token expiration time and pad a 60 seconds buffer to avoid using an expired token
+            expires_in_seconds = token_response.get("expires_in") - 60
+            self.__expires = datetime.now(timezone.utc) + timedelta(seconds=expires_in_seconds)
+
+        except requests.exceptions.RequestException as e:
+            raise QualtricsError(f"Failed to obtain OAuth2 token: {str(e)}") from e
+
     def authenticate(self, headers: Dict, params: Dict) -> Tuple[Dict, Dict]:
-        """Authenticates the request with the token"""
-        headers["Authorization"] = self.config["access_token"]
+        """Authenticates the request with OAuth2 Bearer token"""
+        headers["Authorization"] = f"Bearer {self.access_token}"
         return headers, params
 
     def make_request(
@@ -69,21 +126,26 @@ class Client:
         params: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, Any]] = None,
         body: Optional[Dict[str, Any]] = None,
+        json: Optional[Dict[str, Any]] = None,
         path: Optional[str] = None
     ) -> Any:
         """
         Sends an HTTP request to the specified API endpoint.
         """
+        # Get the access token if it's not already set or expired
+        self._obtain_oauth_token()
+
         params = params or {}
         headers = headers or {}
         body = body or {}
         endpoint = endpoint or f"{self.base_url}/{path}"
         headers, params = self.authenticate(headers, params)
-        return self.__make_request(
+        return self._make_request(
             method, endpoint,
             headers=headers,
             params=params,
             data=body,
+            json=json,
             timeout=self.request_timeout
         )
 
@@ -115,12 +177,12 @@ class Client:
     def get(self, path: str, params: Optional[Dict] = None, full_url: Optional[str] = None) -> Any:
         """GET request. Uses full_url when provided (for next-page URLs)."""
         url = full_url or f"{self.base_url}/{path}"
-        return self._make_request("GET", url, params=params).json()
+        return self.make_request("GET", url, params=params).json()
 
     def post(self, path: str, payload: Optional[Dict] = None, full_url: Optional[str] = None) -> Any:
         """POST request with JSON body."""
         url = full_url or f"{self.base_url}/{path}"
-        return self._make_request("POST", url, json=payload).json()
+        return self.make_request("POST", url, json=payload).json()
 
     def get_file(self, path: str, full_url: Optional[str] = None) -> requests.Response:
         """GET request returning the raw response (for file downloads)."""
@@ -128,7 +190,7 @@ class Client:
         headers = dict(self._get_headers())
         # remove Content-Type for binary downloads
         headers.pop("Content-Type", None)
-        return self._make_request("GET", url, headers=headers)
+        return self.make_request("GET", url, headers=headers)
 
     def poll_export(
         self,
@@ -146,5 +208,4 @@ class Client:
             if status in ("failed", "cancelled"):
                 raise QualtricsError(f"Export failed with status: {status}")
             time.sleep(interval)
-        raise QualtricsError(f"Export did not complete after {max_attempts} attempts")
-
+        raise QualtricsError(f"Export did not complete after {max_attempts} attempts") 
