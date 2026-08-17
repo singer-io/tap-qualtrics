@@ -1,1 +1,83 @@
-{"type": "object", "properties": {}, "additionalProperties": true}
+{
+    "type": "object",
+    "properties": {
+        "targetId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "targetType": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "targetIds": {
+            "type": [
+                "null",
+                {
+                    "type": "array",
+                    "items": {
+                        "type": [
+                            "null",
+                            "string"
+                        ]
+                    }
+                }
+            ]
+        },
+        "emailType": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "daysBetween": {
+            "type": [
+                "null",
+                "integer"
+            ]
+        },
+        "timePeriodLimit": {
+            "type": [
+                "null",
+                {
+                    "type": "object",
+                    "properties": {
+                        "period": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        },
+                        "numMessages": {
+                            "type": [
+                                "null",
+                                "integer"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "alwaysSend": {
+            "type": [
+                "null",
+                "boolean"
+            ]
+        },
+        "ruleId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "mutuallyExclusive": {
+            "type": [
+                "null",
+                "boolean"
+            ]
+        }
+    }
+}

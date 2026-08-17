@@ -6,8 +6,7 @@ from tap_qualtrics.streams.abstracts import DirectoryChildStream
 class OptedOutContacts(DirectoryChildStream):
     tap_stream_id = "opted_out_contacts"
     key_properties = ["contactId"]
-    replication_method = "INCREMENTAL"
-    replication_keys = ["unsubscribeDate"]
+    replication_method = "FULL_TABLE"
     data_key = "result.elements"
     path = "directories/{directory_id}/contacts/optedOutContacts"
     page_size = 100

@@ -202,6 +202,22 @@ class DirectoryChildStream(FullTableStream):
         yield from self._paginate(path)
 
 
+class IncrementalDirectoryChildStream(IncrementalStream):
+    """Incremental stream whose records are fetched once per directory."""
+
+    def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[Dict]:
+        directory_id = (parent_id or {}).get("directoryId") or parent_id
+        if not directory_id:
+            return
+        path = self.path.format(directory_id=directory_id)
+        params: Dict = {"pageSize": self.page_size}
+        if bookmark:
+            params["startDate"] = bookmark
+        for record in self._paginate(path, params):
+            record["_directory_id"] = directory_id
+            yield record
+
+
 class MailingListChildStream(FullTableStream):
     """Stream whose records are fetched once per (directory, mailing-list) pair."""
 

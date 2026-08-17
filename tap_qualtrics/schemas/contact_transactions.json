@@ -1,1 +1,39 @@
-{"type": "object", "properties": {}, "additionalProperties": true}
+{
+    "type": "object",
+    "properties": {
+        "transactionId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "contactId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "mailingListId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "transactionDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "data": {
+            "type": "object",
+            "additionalProperties": {
+                "type": [
+                    "null",
+                    "string"
+                ]
+            }
+        }
+    }
+}

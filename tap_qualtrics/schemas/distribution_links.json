@@ -1,1 +1,72 @@
-{"type": "object", "properties": {}, "additionalProperties": true}
+{
+    "type": "object",
+    "properties": {
+        "contactId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "link": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "linkExpiration": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "lastName": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "firstName": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "externalDataReference": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "email": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "phone": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "unsubscribed": {
+            "type": [
+                "null",
+                "boolean"
+            ]
+        },
+        "status": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "exceededContactFrequency": {
+            "type": [
+                "null",
+                "boolean"
+            ]
+        }
+    }
+}

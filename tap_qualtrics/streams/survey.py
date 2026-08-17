@@ -7,14 +7,14 @@ class SurveyDefinitions(SurveyChildStream):
     key_properties = ["SurveyID"]
     replication_method = "FULL_TABLE"
     data_key = "result"
-    path = "survey-definitions/{survey_id}"
+    path = "survey/{survey_id}"
     parent = "surveys"
 
     def get_records(self, parent_id=None):
         survey_id = (parent_id or {}).get("id") or parent_id
         if not survey_id:
             return
-        resp = self.client.get(f"survey-definitions/{survey_id}")
+        resp = self.client.get(f"survey/{survey_id}")
         record = resp.get("result", {})
         if record:
             record["_survey_id"] = survey_id

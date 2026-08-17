@@ -39,7 +39,7 @@ from tap_qualtrics.streams.survey_flows import SurveyFlows
 from tap_qualtrics.streams.survey_versions import SurveyVersions
 from tap_qualtrics.streams.questions import SurveyQuestions
 from tap_qualtrics.streams.survey_options import SurveyOptions
-from tap_qualtrics.streams.question import SurveyQuotas
+from tap_qualtrics.streams.survey_quotas import SurveyQuotas
 from tap_qualtrics.streams.survey_languages import SurveyLanguages
 from tap_qualtrics.streams.survey_translations import SurveyTranslations
 from tap_qualtrics.streams.survey_response_export import SurveyResponseExport

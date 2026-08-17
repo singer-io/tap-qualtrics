@@ -7,17 +7,14 @@
                 "string"
             ]
         },
-        "description": {
-            "type": [
-                "null",
-                "string"
-            ]
-        },
-        "category": {
-            "type": [
-                "null",
-                "string"
-            ]
+        "additionalFilters": {
+            "type": "array",
+            "items": {
+                "type": [
+                    "null",
+                    "string"
+                ]
+            }
         }
     }
 }

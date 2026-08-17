@@ -1,11 +1,12 @@
-from tap_qualtrics.streams.abstracts import FullTableStream
+from tap_qualtrics.streams.abstracts import IncrementalStream
 
 
-class Surveys(FullTableStream):
+class Surveys(IncrementalStream):
     """Paginated survey list – each element is emitted; children pull per-survey data."""
     tap_stream_id = "surveys"
     key_properties = ["id"]
-    replication_method = "FULL_TABLE"
+    replication_method = "INCREMENTAL"
+    replication_keys = ["lastModified"]
     data_key = "result.elements"
     path = "surveys"
     page_size = 100

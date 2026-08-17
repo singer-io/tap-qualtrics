@@ -1,1 +1,17 @@
-{"type": "object", "properties": {}, "additionalProperties": true}
+{
+    "type": "object",
+    "properties": {
+        "name": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "createdAt": {
+            "type": [
+                "null",
+                "string"
+            ]
+        }
+    }
+}

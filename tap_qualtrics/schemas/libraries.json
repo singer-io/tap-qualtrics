@@ -1,19 +1,13 @@
 {
     "type": "object",
     "properties": {
-        "httpStatus": {
+        "libraryId": {
             "type": [
                 "null",
                 "string"
             ]
         },
-        "requestId": {
-            "type": [
-                "null",
-                "string"
-            ]
-        },
-        "notice": {
+        "libraryName": {
             "type": [
                 "null",
                 "string"

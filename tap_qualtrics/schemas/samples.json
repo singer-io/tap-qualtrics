@@ -1,1 +1,72 @@
-{"type": "object", "properties": {}, "additionalProperties": true}
+{
+    "type": "object",
+    "properties": {
+        "sampleId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "parentGroupId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "name": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "description": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "category": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "creatorId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "ownerId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "contactCount": {
+            "type": [
+                "null",
+                "integer"
+            ]
+        },
+        "hidden": {
+            "type": [
+                "null",
+                "boolean"
+            ]
+        },
+        "frozen": {
+            "type": [
+                "null",
+                "boolean"
+            ]
+        },
+        "creationLogic": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "properties": {}
+        }
+    }
+}

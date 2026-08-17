@@ -1,1 +1,51 @@
-{"type": "object", "properties": {}, "additionalProperties": true}
+{
+    "type": "object",
+    "properties": {
+        "sampleCriteria": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "properties": {
+                "simpleFilter": {
+                    "type": [
+                        "null",
+                        "object"
+                    ],
+                    "properties": {
+                        "filterType": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        },
+                        "comparison": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        },
+                        "value": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "maxSampleSize": {
+            "type": [
+                "null",
+                "integer"
+            ]
+        },
+        "sampleDefinitionId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        }
+    }
+}

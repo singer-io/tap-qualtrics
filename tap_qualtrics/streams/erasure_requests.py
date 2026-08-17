@@ -1,10 +1,11 @@
-﻿from tap_qualtrics.streams.abstracts import FullTableStream
+﻿from tap_qualtrics.streams.abstracts import IncrementalStream
 
 
-class ErasureRequests(FullTableStream):
+class ErasureRequests(IncrementalStream):
     tap_stream_id = "erasure_requests"
     key_properties = ["id"]
-    replication_method = "FULL_TABLE"
+    replication_method = "INCREMENTAL"
+    replication_key = "updated"
     data_key = "result.elements"
     path = "op-erase-personal-data"
     page_size = 100
