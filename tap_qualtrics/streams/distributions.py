@@ -1,8 +1,8 @@
 ﻿from singer import get_bookmark, metrics, write_bookmark, write_record
-from tap_qualtrics.streams.abstracts import SurveyChildStream
+from tap_qualtrics.streams.abstracts import IncrementalStream
 
 
-class Distributions(SurveyChildStream):
+class Distributions(IncrementalStream):
     tap_stream_id = "distributions"
     key_properties = ["id"]
     replication_method = "INCREMENTAL"

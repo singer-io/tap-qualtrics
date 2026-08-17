@@ -1,9 +1,9 @@
 from tap_qualtrics.streams.abstracts import DirectoryChildStream
 
 
-class Contacts(DirectoryChildStream):
+class DirectoryContacts(DirectoryChildStream):
     """Contacts in a directory (page size 500); has contact_transactions child."""
-    tap_stream_id = "contacts"
+    tap_stream_id = "directories_contacts"
     key_properties = ["contactId"]
     replication_method = "FULL_TABLE"
     data_key = "result.elements"

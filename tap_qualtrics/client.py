@@ -1,5 +1,5 @@
 import time
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Mapping, Optional, Tuple
 
 import backoff
 import requests

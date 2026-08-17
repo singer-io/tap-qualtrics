@@ -1,26 +1,25 @@
+from tap_qualtrics.streams.directories_contacts import DirectoryContacts
 from tap_qualtrics.streams.users import Users
 from tap_qualtrics.streams.user import User
 from tap_qualtrics.streams.groups import Groups
 from tap_qualtrics.streams.group_users import GroupUsers
 
 from tap_qualtrics.streams.audit_events_types import AuditEventsTypes
-from tap_qualtrics.streams.events import AuditEvents
+from tap_qualtrics.streams.audit_events import AuditEvents
 from tap_qualtrics.streams.audit_export import AuditExport
 
 from tap_qualtrics.streams.libraries import Libraries
 from tap_qualtrics.streams.libraries_messages import LibraryMessages
-from tap_qualtrics.streams.libraries_survey_questions import LibraryQuestions
+from tap_qualtrics.streams.libraries_survey_questions import LibrariesSurveyQuestions
 from tap_qualtrics.streams.library_blocks import LibraryBlocks
 from tap_qualtrics.streams.library_surveys import LibrarySurveys
 
 from tap_qualtrics.streams.directories import Directories
-from tap_qualtrics.streams.directories_contact import Contacts
 from tap_qualtrics.streams.contact_transactions import ContactTransactions
 from tap_qualtrics.streams.contact_frequency_rules import ContactFrequencyRules
-from tap_qualtrics.streams.directories_contacts import DirectoryContacts
 from tap_qualtrics.streams.opted_out_contacts import OptedOutContacts
 
-from tap_qualtrics.streams.mailinglists import MailingLists
+from tap_qualtrics.streams.mailing_lists import MailingLists
 from tap_qualtrics.streams.mailing_list_contacts import MailingListContacts
 from tap_qualtrics.streams.mailing_list_bounced_contacts import MailingListBouncedContacts
 from tap_qualtrics.streams.mailing_list_opted_out_contacts import MailingListOptedOutContacts
@@ -34,14 +33,8 @@ from tap_qualtrics.streams.sample_definitions import SampleDefinitions
 from tap_qualtrics.streams.transaction_batches import TransactionBatches
 
 from tap_qualtrics.streams.surveys import Surveys
-from tap_qualtrics.streams.survey import SurveyDefinitions
-from tap_qualtrics.streams.survey_flows import SurveyFlows
-from tap_qualtrics.streams.survey_versions import SurveyVersions
-from tap_qualtrics.streams.questions import SurveyQuestions
-from tap_qualtrics.streams.survey_options import SurveyOptions
+from tap_qualtrics.streams.survey import Survey
 from tap_qualtrics.streams.survey_quotas import SurveyQuotas
-from tap_qualtrics.streams.survey_languages import SurveyLanguages
-from tap_qualtrics.streams.survey_translations import SurveyTranslations
 from tap_qualtrics.streams.survey_response_export import SurveyResponseExport
 
 from tap_qualtrics.streams.distributions import Distributions
@@ -74,15 +67,14 @@ STREAMS = {
     # Libraries
     "libraries": Libraries,
     "library_messages": LibraryMessages,
-    "library_questions": LibraryQuestions,
+    "libraries_survey_questions": LibrariesSurveyQuestions,
     "library_blocks": LibraryBlocks,
     "library_surveys": LibrarySurveys,
     # Directories / Contacts
     "directories": Directories,
-    "contacts": Contacts,
     "contact_transactions": ContactTransactions,
     "contact_frequency_rules": ContactFrequencyRules,
-    "directory_contacts": DirectoryContacts,
+    "directories_contacts": DirectoryContacts,
     "opted_out_contacts": OptedOutContacts,
     # Mailing Lists
     "mailing_lists": MailingLists,
@@ -100,14 +92,14 @@ STREAMS = {
     "transaction_batches": TransactionBatches,
     # Surveys
     "surveys": Surveys,
-    "survey_definitions": SurveyDefinitions,
-    "survey_flows": SurveyFlows,
-    "survey_versions": SurveyVersions,
-    "survey_questions": SurveyQuestions,
-    "survey_options": SurveyOptions,
+    "survey": Survey,
+    # "survey_flows": SurveyFlows,
+    # "survey_versions": SurveyVersions,
+    # "survey_questions": SurveyQuestions,
+    # "survey_options": SurveyOptions,
     "survey_quotas": SurveyQuotas,
-    "survey_languages": SurveyLanguages,
-    "survey_translations": SurveyTranslations,
+    # "survey_languages": SurveyLanguages,
+    # "survey_translations": SurveyTranslations,
     "survey_response_export": SurveyResponseExport,
     # Distributions
     "distributions": Distributions,
