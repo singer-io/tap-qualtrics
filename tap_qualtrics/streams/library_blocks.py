@@ -24,5 +24,11 @@ class LibraryBlocks(LibraryChildStream):
             yield {
                 "libraryId": library_id,
                 "category": category,
-                "blocks": blocks,
+                "blocks": [
+                    {
+                        "block_id": block_id,
+                        "block_value": block_value if isinstance(block_value, str) else None,
+                    }
+                    for block_id, block_value in blocks.items()
+                ],
             }

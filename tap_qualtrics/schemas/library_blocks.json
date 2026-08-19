@@ -2,15 +2,35 @@
     "type": "object",
     "properties": {
         "libraryId": {
-            "type": ["null", "string"]
+            "type": [
+                "null",
+                "string"
+            ]
         },
         "category": {
-            "type": ["null", "string"]
+            "type": [
+                "null",
+                "string"
+            ]
         },
         "blocks": {
-            "type": "object",
-            "additionalProperties": {
-                "type": ["null", "string"]
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "block_id": {
+                        "type": [
+                            "null",
+                            "string"
+                        ]
+                    },
+                    "block_value": {
+                        "type": [
+                            "null",
+                            "string"
+                        ]
+                    }
+                }
             }
         }
     }

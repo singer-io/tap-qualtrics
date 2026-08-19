@@ -8,9 +8,17 @@
             "type": ["null", "string"]
         },
         "surveys": {
-            "type": "object",
-            "additionalProperties": {
-                "type": ["null", "string"]
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "survey_id": {
+                        "type": ["null", "string"]
+                    },
+                    "survey_value": {
+                        "type": ["null", "string"]
+                    }
+                }
             }
         }
     }

@@ -24,5 +24,11 @@ class LibrarySurveys(LibraryChildStream):
             yield {
                 "libraryId": library_id,
                 "category": category,
-                "surveys": surveys,
+                "surveys": [
+                    {
+                        "survey_id": survey_id,
+                        "survey_value": survey_value if isinstance(survey_value, str) else None,
+                    }
+                    for survey_id, survey_value in surveys.items()
+                ],
             }
