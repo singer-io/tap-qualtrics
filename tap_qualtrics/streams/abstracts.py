@@ -51,6 +51,8 @@ class BaseStream(ABC):
         else:
             self.schema = {}
             self.mdata = {}
+        if client:
+            self.page_size = client.page_size
         self.child_to_sync: List["BaseStream"] = []
 
     # ------------------------------------------------------------------ #

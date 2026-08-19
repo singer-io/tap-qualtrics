@@ -52,6 +52,7 @@ class Client:
         config_request_timeout = config.get("request_timeout")
         self.request_timeout = float(config_request_timeout) if config_request_timeout else REQUEST_TIMEOUT
         self.start_date = config.get("start_date")
+        self.page_size = int(config.get("page_size", 100))
         self.access_token = None
         self.__expires = datetime.now(timezone.utc) - timedelta(seconds=10)
         self.oauth_token_endpoint = f"https://{self.data_center}.qualtrics.com/oauth2/token"
