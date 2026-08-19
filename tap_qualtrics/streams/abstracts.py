@@ -13,6 +13,8 @@ from singer import (
     write_schema,
 )
 
+from tap_qualtrics.exceptions import QualtricsForbiddenError, QualtricsNotFoundError
+
 LOGGER = get_logger()
 
 
@@ -76,6 +78,22 @@ class BaseStream(ABC):
         except OSError as err:
             LOGGER.error("OS Error writing schema for: %s", self.tap_stream_id)
             raise err
+
+    def check_access(self) -> bool:
+        """Return True if credentials have read access to this stream; False on 403.
+        Child streams always return True — access is governed by the parent check.
+        Streams with no simple GET path (e.g. async export streams) are assumed accessible."""
+        if self.parent:
+            return True
+        path = getattr(self, "path", None)
+        if not path:
+            return True
+        try:
+            self.client.get(path, params={"pageSize": 1})
+            return True
+        except (QualtricsForbiddenError, QualtricsNotFoundError) as exc:
+            LOGGER.warning("Access check failed for stream '%s': %s", self.tap_stream_id, exc)
+            return False
 
     # ------------------------------------------------------------------ #
     # Pagination                                                           #

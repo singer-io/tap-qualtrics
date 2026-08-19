@@ -18,7 +18,6 @@ class AuditExport(IncrementalStream):
     replication_method = "INCREMENTAL"
     replication_keys = ["eventDate"]
     data_key = ""
-    # parent = "audit_events_types"
 
     def _month_windows(self, start_date: str):
         """Yield (start, end) month-boundary pairs from start_date up to now."""
