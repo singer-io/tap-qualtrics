@@ -9,7 +9,8 @@ from requests.exceptions import ChunkedEncodingError, ConnectionError, Timeout
 from singer import get_logger, metrics
 
 from tap_qualtrics.exceptions import (ERROR_CODE_EXCEPTION_MAPPING,
-                                      QualtricsBackoffError, QualtricsError)
+                                      QualtricsBackoffError, QualtricsError,
+                                      QualtricsUnauthorizedError)
 
 LOGGER = get_logger()
 REQUEST_TIMEOUT = 300
@@ -47,9 +48,10 @@ class Client:
         self.config = config
         self.data_center = config.get("dataCenter")
         self._session = requests.Session()
-        self.base_url = f"https://{self.data_center}.qualtrics.com/API/v3/"
+        self.base_url = f"https://{self.data_center}.qualtrics.com/API/v3"
         config_request_timeout = config.get("request_timeout")
         self.request_timeout = float(config_request_timeout) if config_request_timeout else REQUEST_TIMEOUT
+        self.start_date = config.get("start_date")
         self.access_token = None
         self.__expires = datetime.now(timezone.utc) - timedelta(seconds=10)
         self.oauth_token_endpoint = f"https://{self.data_center}.qualtrics.com/oauth2/token"
@@ -102,6 +104,7 @@ class Client:
                 raise QualtricsError(f"Failed to obtain OAuth2 token: HTTP {response.status_code}")
             token_response = response.json()
             self.access_token = token_response.get("access_token")
+            # LOGGER.info(f"OAuth2 token response: {token_response}")
             if not self.access_token:
                 raise QualtricsError("No access_token in OAuth2 response")
 
@@ -140,14 +143,28 @@ class Client:
         body = body or {}
         endpoint = endpoint or f"{self.base_url}/{path}"
         headers, params = self.authenticate(headers, params)
-        return self._make_request(
-            method, endpoint,
-            headers=headers,
-            params=params,
-            data=body,
-            json=json,
-            timeout=self.request_timeout
-        )
+        try:
+            return self._make_request(
+                method, endpoint,
+                headers=headers,
+                params=params,
+                data=body,
+                json=json,
+                timeout=self.request_timeout
+            )
+        except QualtricsUnauthorizedError:
+            # Token expired mid-sync; force refresh and retry once
+            self.access_token = None
+            self._obtain_oauth_token()
+            headers["Authorization"] = f"Bearer {self.access_token}"
+            return self._make_request(
+                method, endpoint,
+                headers=headers,
+                params=params,
+                data=body,
+                json=json,
+                timeout=self.request_timeout
+            )
 
     @backoff.on_exception(
         wait_gen=backoff.expo,
@@ -158,8 +175,8 @@ class Client:
             Timeout,
             QualtricsBackoffError,
         ),
-        max_tries=8,
-        factor=3,
+        max_tries=3,
+        factor=2,
     )
     def _make_request(
         self, method: str, url: str, **kwargs
@@ -168,6 +185,7 @@ class Client:
         kwargs.setdefault("headers", self._get_headers())
         kwargs.setdefault("timeout", self.request_timeout)
         with metrics.http_request_timer(url):
+            LOGGER.info("Making %s request to %s with kwargs: %s", method, url, kwargs)
             response = self._session.request(method.upper(), url, **kwargs)
         if response.status_code == 429:
             raise QualtricsBackoffError("Rate limited (429)")
@@ -203,9 +221,9 @@ class Client:
             response = self.get(status_path)
             status = (response.get("result") or {}).get("status", "")
             LOGGER.info("Export %s attempt %d/%d: %s", status_path, attempt + 1, max_attempts, status)
-            if status == "complete":
+            if status.lower() in ("complete", "completed"):
                 return response
-            if status in ("failed", "cancelled"):
+            if status.lower() in ("failed", "cancelled", "error"):
                 raise QualtricsError(f"Export failed with status: {status}")
             time.sleep(interval)
-        raise QualtricsError(f"Export did not complete after {max_attempts} attempts") 
+        raise QualtricsError(f"Export did not complete after {max_attempts} attempts")

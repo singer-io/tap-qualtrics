@@ -14,19 +14,17 @@ def update_currently_syncing(state: Dict, stream_name: str) -> None:
     singer.write_state(state)
 
 
-def _attach_children(stream, streams_to_sync: list, catalog: singer.Catalog, client: Client) -> None:
-    """Recursively attach selected child stream objects to a parent stream."""
+def write_schema(stream, client: Client, streams_to_sync: list, catalog: singer.Catalog) -> None:
+    if stream.is_selected():
+        stream.write_schema()
+
     for child_name in stream.children:
-        if child_name not in STREAMS:
-            continue
         child_entry = catalog.get_stream(child_name)
         if child_entry is None:
             continue
         child_obj = STREAMS[child_name](client=client, catalog_entry=child_entry)
-        if child_name in streams_to_sync or child_obj.parent:
-            if child_obj.is_selected() or child_name in streams_to_sync:
-                child_obj.write_schema()
-            _attach_children(child_obj, streams_to_sync, catalog, client)
+        write_schema(child_obj, client, streams_to_sync, catalog)
+        if child_name in streams_to_sync:
             stream.child_to_sync.append(child_obj)
 
 
@@ -43,19 +41,16 @@ def sync(client: Client, config: Dict, catalog: singer.Catalog, state: Dict) -> 
                 LOGGER.warning("Stream %s not in STREAMS registry – skipping", stream_name)
                 continue
 
-            stream_entry = catalog.get_stream(stream_name)
-            if stream_entry is None:
+            stream = STREAMS[stream_name](client=client, catalog_entry=catalog.get_stream(stream_name))
+
+            if stream.parent:
+                # Auto-add parent so it drives this child; child is synced via parent
+                if stream.parent not in streams_to_sync:
+                    streams_to_sync.append(stream.parent)
                 continue
 
-            stream = STREAMS[stream_name](client=client, catalog_entry=stream_entry)
+            write_schema(stream, client, streams_to_sync, catalog)
 
-            # Skip child-only streams; they are synced via their parent
-            if stream.parent and stream.parent in streams_to_sync:
-                continue
-
-            _attach_children(stream, streams_to_sync, catalog, client)
-
-            stream.write_schema()
             LOGGER.info("START Syncing: %s", stream_name)
             update_currently_syncing(state, stream_name)
 

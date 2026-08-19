@@ -7,4 +7,4 @@ class TicketTeams(FullTableStream):
     replication_method = "FULL_TABLE"
     data_key = "result.elements"
     path = "ticket-teams"
-    page_size = 50
+    page_size = 25

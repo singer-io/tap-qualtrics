@@ -8,7 +8,7 @@ class DirectoryContacts(DirectoryChildStream):
     replication_method = "FULL_TABLE"
     data_key = "result.elements"
     path = "directories/{directory_id}/contacts"
-    page_size = 500
+    page_size = 100
     parent = "directories"
     children = ["contact_transactions"]
 

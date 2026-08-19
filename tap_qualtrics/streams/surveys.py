@@ -11,11 +11,7 @@ class Surveys(IncrementalStream):
     path = "surveys"
     page_size = 100
     children = [
-        "survey_definitions",
-        "survey_questions",
-        "survey_flows",
-        "survey_versions",
-        "survey_options",
+        "survey"
         "survey_quotas",
         "survey_languages",
         "sms_distributions",

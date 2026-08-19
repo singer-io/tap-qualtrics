@@ -94,7 +94,7 @@ class BaseStream(ABC):
                 response = self.client.get(path, full_url=next_url)
             else:
                 response = self.client.get(path, params=params)
-
+            # LOGGER.info("Paginating %s: %s", path, response.get("result", {}))
             records = _get_nested(response, self.data_key)
             if isinstance(records, list):
                 yield from records

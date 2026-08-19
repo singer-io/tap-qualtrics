@@ -1,44 +1,16 @@
 {
     "type": "object",
     "properties": {
-        "property1": {
-            "type": [
-                "null",
-                "object"
-            ],
-            "properties": {
-                "property1": {
-                    "type": [
-                        "null",
-                        "string"
-                    ]
-                },
-                "property2": {
-                    "type": [
-                        "null",
-                        "string"
-                    ]
-                }
-            }
+        "libraryId": {
+            "type": ["null", "string"]
         },
-        "property2": {
-            "type": [
-                "null",
-                "object"
-            ],
-            "properties": {
-                "property1": {
-                    "type": [
-                        "null",
-                        "string"
-                    ]
-                },
-                "property2": {
-                    "type": [
-                        "null",
-                        "string"
-                    ]
-                }
+        "category": {
+            "type": ["null", "string"]
+        },
+        "blocks": {
+            "type": "object",
+            "additionalProperties": {
+                "type": ["null", "string"]
             }
         }
     }

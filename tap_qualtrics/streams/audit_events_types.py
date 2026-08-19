@@ -7,4 +7,5 @@ class AuditEventsTypes(FullTableStream):
     replication_method = "FULL_TABLE"
     data_key = "result.elements"
     path = "logs/activitytypes"
+    children = ["audit_events"]
 

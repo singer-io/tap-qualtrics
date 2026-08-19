@@ -9,14 +9,13 @@ class Directories(FullTableStream):
     path = "directories"
     page_size = 5
     children = [
-        "contacts",
-        "directory_contacts",
-        "mailing_lists",
-        "segments",
-        "samples",
-        "sample_definitions",
-        "transaction_batches",
+        "directories_contacts",
         "contact_frequency_rules",
+        "mailing_lists",
         "opted_out_contacts",
+        "sample_definitions",
+        "samples",
+        "segments",
+        "transaction_batches"
     ]
 

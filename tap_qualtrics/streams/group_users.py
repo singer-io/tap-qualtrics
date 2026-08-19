@@ -8,4 +8,3 @@ class GroupUsers(GroupChildStream):
     data_key = "result.elements"
     path = "groups/{group_id}/members"
     parent = "groups"
-
