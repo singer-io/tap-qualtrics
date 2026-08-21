@@ -19,6 +19,19 @@ class TicketsExport(IncrementalStream):
     data_key = ""
     children = ["ticket_relative_events", "ticket_root_causes"]
 
+    def _download_file(self, file_id: str) -> list:
+        resp = self.client.get_file(f"ticket-exports/{file_id}/file")
+        try:
+            records = resp.json()
+        except Exception:
+            zf = zipfile.ZipFile(io.BytesIO(resp.content))
+            records = []
+            for name in zf.namelist():
+                records.extend(json.loads(zf.read(name)))
+        if isinstance(records, list):
+            return records
+        return records.get("tickets", [])
+
     def get_records(self, parent_id: Any = None, start_date: str = "") -> Iterator[Dict]:
         now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:00:00Z")
         sd = (start_date or self.client.start_date or "")[:10]
@@ -35,18 +48,7 @@ class TicketsExport(IncrementalStream):
         final = self.client.poll_export(f"ticket-exports/{export_id}/status")
         file_id = (final.get("result") or {}).get("fileId", export_id)
 
-        resp = self.client.get_file(f"ticket-exports/{file_id}/file")
-        try:
-            records = resp.json()
-        except Exception:
-            zf = zipfile.ZipFile(io.BytesIO(resp.content))
-            records = []
-            for name in zf.namelist():
-                records.extend(json.loads(zf.read(name)))
-        if isinstance(records, list):
-            yield from records
-        elif isinstance(records, dict):
-            yield from records.get("tickets", [])
+        yield from self._download_file(file_id)
 
     def sync(self, state: Dict, transformer: Transformer, parent_id: Any = None) -> int:
         bookmark = get_bookmark(

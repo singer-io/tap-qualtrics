@@ -1,11 +1,44 @@
 import os
 import json
+import re
 import singer
-from typing import Dict, Tuple
+from typing import Any, Dict, Tuple
 from singer import metadata
 from tap_qualtrics.streams import STREAMS
 
 LOGGER = singer.get_logger()
+
+_DATETIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
+
+
+def _infer_json_type(value: Any) -> Dict:
+    if value is None:
+        return {"type": ["null", "string"]}
+    if isinstance(value, bool):
+        return {"type": ["null", "boolean"]}
+    if isinstance(value, int):
+        return {"type": ["null", "integer"]}
+    if isinstance(value, float):
+        return {"type": ["null", "number"]}
+    if isinstance(value, list):
+        items_schema = _infer_json_type(value[0]) if value else {}
+        return {"type": ["null", "array"], "items": items_schema}
+    if isinstance(value, dict):
+        props = {k: _infer_json_type(v) for k, v in value.items()}
+        return {"type": ["null", "object"], "properties": props}
+    if isinstance(value, str) and _DATETIME_RE.match(value):
+        return {"type": ["null", "string"], "format": "date-time"}
+    return {"type": ["null", "string"]}
+
+
+def infer_schema(records: list) -> Dict:
+    """Build a JSON Schema by inspecting the union of fields across all records."""
+    properties: Dict[str, Any] = {}
+    for record in records:
+        for key, value in (record or {}).items():
+            if key not in properties:
+                properties[key] = _infer_json_type(value)
+    return {"type": "object", "properties": properties}
 
 
 def get_abs_path(path: str) -> str:
@@ -46,6 +79,8 @@ def get_schemas() -> Tuple[Dict, Dict]:
 
     refs = load_schema_references()
     for stream_name, stream_obj in STREAMS.items():
+        if getattr(stream_obj, "dynamic_schema", False):
+            continue  # catalog entries built at runtime via discover_dynamic_entries()
         schema_path = get_abs_path("schemas/{}.json".format(stream_name))
         with open(schema_path) as file:
             schema = json.load(file)

@@ -1,13 +1,19 @@
 {
     "type": "object",
     "properties": {
-        "status": {
+        "name": {
             "type": [
                 "null",
                 "string"
             ]
         },
-        "id": {
+        "description": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "category": {
             "type": [
                 "null",
                 "string"

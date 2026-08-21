@@ -105,7 +105,6 @@ class Client:
                 raise QualtricsError(f"Failed to obtain OAuth2 token: HTTP {response.status_code}")
             token_response = response.json()
             self.access_token = token_response.get("access_token")
-            # LOGGER.info(f"OAuth2 token response: {token_response}")
             if not self.access_token:
                 raise QualtricsError("No access_token in OAuth2 response")
 
@@ -186,7 +185,6 @@ class Client:
         kwargs.setdefault("headers", self._get_headers())
         kwargs.setdefault("timeout", self.request_timeout)
         with metrics.http_request_timer(url):
-            LOGGER.info("Making %s request to %s with kwargs: %s", method, url, kwargs)
             response = self._session.request(method.upper(), url, **kwargs)
         if response.status_code == 429:
             raise QualtricsBackoffError("Rate limited (429)")
@@ -221,7 +219,6 @@ class Client:
         for attempt in range(max_attempts):
             response = self.get(status_path)
             status = (response.get("result") or {}).get("status", "")
-            LOGGER.info("Export %s attempt %d/%d: %s", status_path, attempt + 1, max_attempts, status)
             if status.lower() in ("complete", "completed"):
                 return response
             if status.lower() in ("failed", "cancelled", "error"):

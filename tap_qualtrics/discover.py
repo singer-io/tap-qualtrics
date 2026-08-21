@@ -4,6 +4,11 @@ from singer.catalog import Catalog, CatalogEntry, Schema
 from tap_qualtrics.exceptions import QualtricsForbiddenError
 from tap_qualtrics.schema import get_schemas
 from tap_qualtrics.streams import STREAMS
+from tap_qualtrics.streams.audit_export import AuditExport
+from tap_qualtrics.streams.survey_response_export import SurveyResponseExport
+
+# Streams whose catalog entries are built at runtime from live API data.
+_DYNAMIC_SCHEMA_STREAMS = {AuditExport.tap_stream_id, SurveyResponseExport.tap_stream_id}
 
 LOGGER = singer.get_logger()
 
@@ -63,6 +68,8 @@ def discover(client=None) -> Catalog:
     catalog = Catalog([])
 
     for stream_name, schema_dict in schemas.items():
+        if stream_name in _DYNAMIC_SCHEMA_STREAMS:
+            continue  # replaced below by per-parent entries
         try:
             schema = Schema.from_dict(schema_dict)
             mdata = field_metadata[stream_name]
@@ -84,5 +91,36 @@ def discover(client=None) -> Catalog:
             )
         )
 
+    if client is not None:
+        _add_dynamic_entries(client, catalog)
+
     return catalog
+
+
+def _add_dynamic_entries(client, catalog: Catalog) -> None:
+    """Append per-parent catalog entries for dynamic-schema streams."""
+    for stream_cls in (AuditExport, SurveyResponseExport):
+        for stream_name, schema_dict, key_props in stream_cls.discover_dynamic_entries(client):
+            mdata = metadata.to_list(
+                metadata.write(
+                    metadata.write(
+                        metadata.new(),
+                        (),
+                        "table-key-properties",
+                        key_props,
+                    ),
+                    (),
+                    "selected",
+                    False,
+                )
+            )
+            catalog.streams.append(
+                CatalogEntry(
+                    stream=stream_name,
+                    tap_stream_id=stream_name,
+                    key_properties=key_props,
+                    schema=Schema.from_dict(schema_dict),
+                    metadata=mdata,
+                )
+            )
 

@@ -1,31 +1,99 @@
 import json
-from typing import Any, Dict, Iterator
+from typing import Any, Dict, Iterator, List
 
-from singer import Transformer, metrics, write_record
+import backoff
 
-from tap_qualtrics.streams.abstracts import FullTableStream
+from singer import Transformer, get_logger, metadata, metrics, write_record, write_schema
+
+from tap_qualtrics.streams.abstracts import IncrementalStream
+from tap_qualtrics.exceptions import QualtricsBackoffError
 from singer import get_logger
 LOGGER = get_logger()
 
-class SurveyResponseExport(FullTableStream):
+class SurveyResponseExport(IncrementalStream):
     tap_stream_id = "survey_response_export"
     key_properties = ["responseId"]
-    replication_method = "FULL_TABLE"
+    replication_method = "INCREMENTAL"
+    replication_keys = ["recorded_date"]
     data_key = "responses"
     parent = "surveys"
+    dynamic_schema = True
 
-    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
+    @classmethod
+    def discover_dynamic_entries(cls, client) -> List[Dict]:
+        """Return (stream_name, schema, key_properties) for each survey that has response data."""
+        from tap_qualtrics.schema import infer_schema
+
+        surveys_resp = client.get("surveys")
+        surveys = (surveys_resp.get("result") or {}).get("elements", [])
+
+        @backoff.on_exception(backoff.expo, QualtricsBackoffError, max_tries=5, jitter=backoff.full_jitter)
+        def _fetch_records(survey_id):
+            """Run one full export cycle; QualtricsBackoffError triggers exponential retry."""
+            body = {
+                "startDate": client.start_date,
+                "format": "json",
+                "compress": False,
+                "limit": 50,
+                "sortByLastModifiedDate": True,
+            }
+            start = client.post(f"surveys/{survey_id}/export-responses", body)
+            export_id = (start.get("result") or {}).get("progressId", "")
+            if not export_id:
+                return []
+            final = client.poll_export(f"surveys/{survey_id}/export-responses/{export_id}")
+            file_id = (final.get("result") or {}).get("fileId", "")
+            if not file_id:
+                return []
+            resp = client.get_file(f"surveys/{survey_id}/export-responses/{file_id}/file")
+            try:
+                data = json.loads(resp.content)
+                return data.get("responses", [])
+            except Exception:
+                return []
+
+        entries = []
+        for survey in surveys:
+            survey_id = survey.get("id") if isinstance(survey, dict) else survey
+            if not survey_id:
+                continue
+
+            try:
+                records = _fetch_records(survey_id)
+            except QualtricsBackoffError:
+                LOGGER.warning("Skipping survey '%s' from catalog: still rate limited after retries.", survey_id)
+                continue
+            except Exception as exc:
+                LOGGER.warning("Skipping survey '%s' from catalog: %s", survey_id, exc)
+                continue
+
+            if not records:
+                LOGGER.info("Skipping survey '%s' from catalog: no data available in the discovery window.", survey_id)
+                continue
+
+            for record in records:
+                record["survey_id"] = survey_id
+                record["recorded_date"] = (record.get("values") or {}).get("recordedDate", "")
+
+            schema = infer_schema(records)
+            entries.append((f"survey_response_export__{survey_id}", schema, cls.key_properties))
+            LOGGER.info("Discovered schema for survey_response_export__%s (%d sample records).", survey_id, len(records))
+
+        return entries
+
+
+    def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[Dict]:
         survey_id = (parent_id or {}).get("id") or parent_id
         if not survey_id:
             return
         body = {
-            "startDate": self.client.start_date,
+            "startDate": bookmark or self.client.start_date,
             "format": "json",
             "compress": False,
             "limit": 50000,
             "sortByLastModifiedDate": True,
         }
-        LOGGER.info(f"Starting export for survey {survey_id}")
+        LOGGER.info("Starting export for survey %s", survey_id)
         start = self.client.post(f"surveys/{survey_id}/export-responses", body)
         export_id = (start.get("result") or {}).get("progressId", "")
         if not export_id:
@@ -37,19 +105,45 @@ class SurveyResponseExport(FullTableStream):
             return
 
         resp = self.client.get_file(f"surveys/{survey_id}/export-responses/{file_id}/file")
-        LOGGER.info("File response status: %s, content-type: %s, size: %d bytes",
-                    resp.status_code, resp.headers.get("Content-Type"), len(resp.content))
-        LOGGER.info("File response preview: %s", resp.content[:500])
         data = json.loads(resp.content)
         for response in data.get("responses", []):
             response["survey_id"] = survey_id
+            response["recorded_date"] = (response.get("values") or {}).get("recordedDate", "")
             yield response
 
     def sync(self, state: Dict, transformer: Transformer, parent_id: Any = None) -> int:
-        with metrics.record_counter(self.tap_stream_id) as counter:
-            for record in self.get_records(parent_id):
-                transformed = transformer.transform(record, self.schema, self.mdata)
-                if self.is_selected():
-                    write_record(self.tap_stream_id, transformed)
+        survey_id = (parent_id or {}).get("id") or parent_id
+        if not survey_id:
+            return 0
+
+        dynamic_id = f"{self.tap_stream_id}__{survey_id}"
+
+        # Only sync surveys that were discovered and selected in the catalog.
+        catalog_entry = self.catalog.get_stream(dynamic_id) if self.catalog else None
+        if not catalog_entry:
+            LOGGER.debug("Skipping %s: not in catalog (no data in discovery window).", dynamic_id)
+            return 0
+        if not metadata.get(metadata.to_map(catalog_entry.metadata), (), "selected"):
+            LOGGER.debug("Skipping %s: not selected.", dynamic_id)
+            return 0
+
+        schema = catalog_entry.schema.to_dict()
+        mdata = metadata.to_map(catalog_entry.metadata)
+        write_schema(dynamic_id, schema, self.key_properties)
+
+        from singer import get_bookmark as _get_bookmark, write_bookmark as _write_bookmark
+        bookmark = _get_bookmark(state, dynamic_id, self.replication_keys[0], self.client.start_date)
+        max_bk = bookmark
+
+        with metrics.record_counter(dynamic_id) as counter:
+            for record in self.get_records(parent_id, bookmark=bookmark):
+                transformed = transformer.transform(record, schema, mdata)
+                rec_bk = transformed.get(self.replication_keys[0], "")
+                if rec_bk >= bookmark:
+                    write_record(dynamic_id, transformed)
                     counter.increment()
+                    if rec_bk > max_bk:
+                        max_bk = rec_bk
+
+        state = _write_bookmark(state, dynamic_id, self.replication_keys[0], max_bk)
         return counter.value

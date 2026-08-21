@@ -7,6 +7,7 @@ from tap_qualtrics.streams.group_users import GroupUsers
 from tap_qualtrics.streams.audit_events_types import AuditEventsTypes
 from tap_qualtrics.streams.audit_events import AuditEvents
 from tap_qualtrics.streams.audit_export import AuditExport
+from tap_qualtrics.streams.audit_export_event_types import AuditExportEventTypes
 
 from tap_qualtrics.streams.libraries import Libraries
 from tap_qualtrics.streams.libraries_messages import LibraryMessages
@@ -52,7 +53,6 @@ from tap_qualtrics.streams.ticket_statuses import TicketStatuses
 from tap_qualtrics.streams.tickets_export import TicketsExport
 from tap_qualtrics.streams.ticket_relative_events import TicketRelativeEvents
 from tap_qualtrics.streams.ticket_root_causes import TicketRootCauses
-from tap_qualtrics.streams.poll_ticket_export import PollTicketExport
 
 STREAMS = {
     # Users / Groups
@@ -63,6 +63,7 @@ STREAMS = {
     # Audit
     "audit_events_types": AuditEventsTypes,
     "audit_events": AuditEvents,
+    "audit_export_event_types": AuditExportEventTypes,
     "audit_export": AuditExport,
     # Libraries
     "libraries": Libraries,
@@ -117,7 +118,6 @@ STREAMS = {
     "tickets_export": TicketsExport,
     "ticket_relative_events": TicketRelativeEvents,
     "ticket_root_causes": TicketRootCauses,
-    "poll_ticket_export": PollTicketExport,
 }
 
 

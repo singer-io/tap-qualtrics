@@ -47,6 +47,7 @@ class BaseStream(ABC):
     def __init__(self, client=None, catalog_entry=None) -> None:
         self.client = client
         self.catalog_entry = catalog_entry
+        self.catalog = None  # full singer.Catalog; set for dynamic-schema streams
         if catalog_entry:
             self.schema = catalog_entry.schema.to_dict()
             self.mdata = metadata.to_map(catalog_entry.metadata)
@@ -320,7 +321,7 @@ class TicketChildStream(FullTableStream):
     """Stream whose records are fetched once per ticket."""
 
     def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
-        ticket_id = (parent_id or {}).get("ticketId") or (parent_id or {}).get("id") or parent_id
+        ticket_id = (parent_id or {}).get("key") or (parent_id or {}).get("ticketId") or (parent_id or {}).get("id") or parent_id
         if not ticket_id:
             return
         path = self.path.format(ticket_id=ticket_id)
