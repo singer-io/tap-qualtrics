@@ -51,7 +51,7 @@ from tap_qualtrics.streams.ticket_groups import TicketGroups
 from tap_qualtrics.streams.ticket_teams import TicketTeams
 from tap_qualtrics.streams.ticket_statuses import TicketStatuses
 from tap_qualtrics.streams.tickets import Tickets
-from tap_qualtrics.streams.ticket_relative_events import TicketRelativeEvents
+from tap_qualtrics.streams.ticket_retrieve_events import TicketRetrieveEvents
 from tap_qualtrics.streams.ticket_root_causes import TicketRootCauses
 
 STREAMS = {
@@ -110,7 +110,7 @@ STREAMS = {
     "ticket_teams": TicketTeams,
     "ticket_statuses": TicketStatuses,
     "tickets": Tickets,
-    "ticket_relative_events": TicketRelativeEvents,
+    "ticket_retrieve_events": TicketRetrieveEvents,
     "ticket_root_causes": TicketRootCauses,
 }
 

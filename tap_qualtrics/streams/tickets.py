@@ -8,7 +8,7 @@ class Tickets(FullTableStream):
     data_key = "result.elements"
     path = "tickets"
     page_size = 50
-    children = ["ticket_root_causes", "ticket_relative_events"]
+    children = ["ticket_root_causes", "ticket_retrieve_events"]
 
     def get_records(self, parent_id=None):
         yield from self._paginate(self.path, {"allTickets": "true", "pageSize": self.page_size})
