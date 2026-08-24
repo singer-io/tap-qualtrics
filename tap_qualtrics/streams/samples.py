@@ -17,5 +17,6 @@ class Samples(DirectoryChildStream):
             return
         path = self.path.format(directory_id=directory_id)
         for record in self._paginate(path, {"pageSize": self.page_size}):
+            record["directoryId"] = directory_id
             record["_directory_id"] = directory_id
             yield record

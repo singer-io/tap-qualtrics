@@ -50,7 +50,7 @@ from tap_qualtrics.streams.erasure_requests import ErasureRequests
 from tap_qualtrics.streams.ticket_groups import TicketGroups
 from tap_qualtrics.streams.ticket_teams import TicketTeams
 from tap_qualtrics.streams.ticket_statuses import TicketStatuses
-from tap_qualtrics.streams.tickets_export import TicketsExport
+from tap_qualtrics.streams.tickets import Tickets
 from tap_qualtrics.streams.ticket_relative_events import TicketRelativeEvents
 from tap_qualtrics.streams.ticket_root_causes import TicketRootCauses
 
@@ -94,13 +94,7 @@ STREAMS = {
     # Surveys
     "surveys": Surveys,
     "survey": Survey,
-    # "survey_flows": SurveyFlows,
-    # "survey_versions": SurveyVersions,
-    # "survey_questions": SurveyQuestions,
-    # "survey_options": SurveyOptions,
     "survey_quotas": SurveyQuotas,
-    # "survey_languages": SurveyLanguages,
-    # "survey_translations": SurveyTranslations,
     "survey_response_export": SurveyResponseExport,
     # Distributions
     "distributions": Distributions,
@@ -115,7 +109,7 @@ STREAMS = {
     "ticket_groups": TicketGroups,
     "ticket_teams": TicketTeams,
     "ticket_statuses": TicketStatuses,
-    "tickets_export": TicketsExport,
+    "tickets": Tickets,
     "ticket_relative_events": TicketRelativeEvents,
     "ticket_root_causes": TicketRootCauses,
 }

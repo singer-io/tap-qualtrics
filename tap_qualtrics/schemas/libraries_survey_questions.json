@@ -1,43 +1,23 @@
 {
     "type": "object",
     "properties": {
-        "property1": {
-            "type": [
-                "null",
-                "object"
-            ],
-            "properties": {
-                "property1": {
-                    "type": [
-                        "null",
-                        "string"
-                    ]
-                },
-                "property2": {
-                    "type": [
-                        "null",
-                        "string"
-                    ]
-                }
-            }
+        "libraryId": {
+            "type": ["null", "string"]
         },
-        "property2": {
-            "type": [
-                "null",
-                "object"
-            ],
-            "properties": {
-                "property1": {
-                    "type": [
-                        "null",
-                        "string"
-                    ]
-                },
-                "property2": {
-                    "type": [
-                        "null",
-                        "string"
-                    ]
+        "category": {
+            "type": ["null", "string"]
+        },
+        "questions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "question_id": {
+                        "type": ["null", "string"]
+                    },
+                    "question_value": {
+                        "type": ["null", "string"]
+                    }
                 }
             }
         }

@@ -8,7 +8,7 @@ class Segments(IncrementalDirectoryChildStream):
     replication_keys = ["lastModifiedDate"]
     data_key = "result.elements"
     path = "directories/{directory_id}/segments"
-    page_size = 20
+    page_size = 10
     parent = "directories"
     children = ["segment_contacts"]
 

@@ -7,4 +7,4 @@ class TicketRootCauses(TicketChildStream):
     replication_method = "FULL_TABLE"
     data_key = "result.elements"
     path = "tickets/{ticket_id}/rootCauses"
-    parent = "tickets_export"
+    parent = "tickets"

@@ -8,7 +8,7 @@ import backoff
 
 from singer import Transformer, get_bookmark, get_logger, metadata, metrics, write_bookmark, write_record, write_schema
 
-from tap_qualtrics.exceptions import QualtricsBadRequestError, QualtricsBackoffError
+from tap_qualtrics.exceptions import QualtricsBadRequestError, QualtricsBackoffError, QualtricsError
 from tap_qualtrics.streams.abstracts import IncrementalStream
 
 LOGGER = get_logger()
@@ -31,7 +31,11 @@ class AuditExport(IncrementalStream):
         discovery_start = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
         discovery_end = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        resp = client.get("audit-events")
+        try:
+            resp = client.get("audit-events")
+        except QualtricsError as exc:
+            LOGGER.warning("Cannot list audit event types during discovery: %s", exc)
+            return []
         event_types = (resp.get("result") or {}).get("elements", [])
 
         @backoff.on_exception(backoff.expo, QualtricsBackoffError, max_tries=5, jitter=backoff.full_jitter)

@@ -1,6 +1,12 @@
 {
     "type": "object",
     "properties": {
+        "sampleId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
         "contactId": {
             "type": [
                 "null",

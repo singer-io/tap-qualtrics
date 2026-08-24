@@ -2,7 +2,6 @@ from tap_qualtrics.streams.abstracts import IncrementalStream
 
 
 class Surveys(IncrementalStream):
-    """Paginated survey list – each element is emitted; children pull per-survey data."""
     tap_stream_id = "surveys"
     key_properties = ["id"]
     replication_method = "INCREMENTAL"
@@ -11,9 +10,8 @@ class Surveys(IncrementalStream):
     path = "surveys"
     page_size = 100
     children = [
-        "survey"
+        "survey",
         "survey_quotas",
-        "survey_languages",
         "sms_distributions",
         "survey_response_export",
         "distributions",

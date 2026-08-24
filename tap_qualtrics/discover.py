@@ -1,7 +1,7 @@
 import singer
 from singer import metadata
 from singer.catalog import Catalog, CatalogEntry, Schema
-from tap_qualtrics.exceptions import QualtricsForbiddenError
+from tap_qualtrics.exceptions import QualtricsForbiddenError, QualtricsError
 from tap_qualtrics.schema import get_schemas
 from tap_qualtrics.streams import STREAMS
 from tap_qualtrics.streams.audit_export import AuditExport
@@ -30,13 +30,68 @@ def _prune_inaccessible_children(schemas: dict, field_metadata: dict) -> None:
                 changed = True
 
 
+def _topological_order(names, streams_map):
+    """Yield stream names so every parent comes before its children."""
+    ordered, visited = [], set()
+
+    def visit(name):
+        if name in visited:
+            return
+        visited.add(name)
+        parent = (streams_map.get(name) or type("_", (), {"parent": None})).parent
+        if parent and parent in names:
+            visit(parent)
+        ordered.append(name)
+
+    for name in names:
+        visit(name)
+    return ordered
+
+
+def _fetch_sample_record(client, path):
+    """Return the first record from path (pageSize=1), or None on any error."""
+    try:
+        resp = client.get(path, params={"pageSize": 1})
+        result = resp.get("result") or {}
+        elements = result.get("elements") or result.get("result") or []
+        return elements[0] if elements else None
+    except Exception:
+        return None
+
+
 def _apply_access_checks(client, schemas: dict, field_metadata: dict) -> None:
-    """Probe each parent stream for read access and remove inaccessible ones in place."""
-    inaccessible = [
-        name
-        for name, stream_cls in STREAMS.items()
-        if name in schemas and not stream_cls(client=client).check_access()
-    ]
+    """Probe every stream (parents and children) and remove inaccessible ones."""
+    inaccessible = []
+    # stream_name -> one sample record (enriched with parent context for grandchild probes)
+    parent_samples = {}
+
+    for name in _topological_order(set(schemas), STREAMS):
+        stream_cls = STREAMS.get(name)
+        if not stream_cls:
+            continue
+        parent_name = stream_cls.parent
+        if parent_name and parent_name in inaccessible:
+            continue  # pruned below with _prune_inaccessible_children
+
+        parent_record = parent_samples.get(parent_name) if parent_name else None
+        instance = stream_cls(client=client)
+
+        if not instance.check_access(parent_record):
+            inaccessible.append(name)
+            continue
+
+        # Fetch a sample record so this stream's children can be probed
+        if parent_record is not None:
+            probe_path = instance._make_probe_path(parent_record)
+        elif not stream_cls.parent:
+            probe_path = getattr(instance, "path", None)
+        else:
+            probe_path = None
+
+        if probe_path:
+            sample = _fetch_sample_record(client, probe_path)
+            if sample:
+                parent_samples[name] = instance._enrich_sample(sample, parent_record or {})
 
     for name in inaccessible:
         schemas.pop(name, None)
@@ -100,7 +155,12 @@ def discover(client=None) -> Catalog:
 def _add_dynamic_entries(client, catalog: Catalog) -> None:
     """Append per-parent catalog entries for dynamic-schema streams."""
     for stream_cls in (AuditExport, SurveyResponseExport):
-        for stream_name, schema_dict, key_props in stream_cls.discover_dynamic_entries(client):
+        try:
+            entries = stream_cls.discover_dynamic_entries(client)
+        except QualtricsError as exc:
+            LOGGER.warning("Skipping dynamic entries for '%s' during discovery: %s", stream_cls.tap_stream_id, exc)
+            continue
+        for stream_name, schema_dict, key_props in entries:
             mdata = metadata.to_list(
                 metadata.write(
                     metadata.write(

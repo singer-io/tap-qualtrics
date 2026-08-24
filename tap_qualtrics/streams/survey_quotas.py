@@ -6,7 +6,7 @@ class SurveyQuotas(SurveyChildStream):
     key_properties = ["quotaId"]
     replication_method = "FULL_TABLE"
     data_key = "result.elements"
-    path = "survey/{survey_id}/quotas"
+    path = "surveys/{survey_id}/quotas"
     page_size = 100
     parent = "surveys"
 

@@ -1,6 +1,12 @@
 {
     "type": "object",
     "properties": {
+        "groupId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
         "id": {
             "type": [
                 "null",

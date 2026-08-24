@@ -7,5 +7,5 @@ class MailingListOptedOutContacts(MailingListChildStream):
     replication_method = "FULL_TABLE"
     data_key = "result.elements"
     path = "directories/{directory_id}/mailinglists/{mailing_list_id}/optedOutContacts"
-    page_size = 1000
+    page_size = 50
     parent = "mailing_lists"

@@ -1,6 +1,12 @@
 {
     "type": "object",
     "properties": {
+        "survey_id": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
         "id": {
             "type": [
                 "null",

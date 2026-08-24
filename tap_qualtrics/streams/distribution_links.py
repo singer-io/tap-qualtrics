@@ -18,4 +18,6 @@ class DistributionLinks(FullTableStream):
         if survey_id:
             params["surveyId"] = survey_id
         path = f"distributions/{distribution_id}/links"
-        yield from self._paginate(path, params)
+        for record in self._paginate(path, params):
+            record["distributionId"] = distribution_id
+            yield record

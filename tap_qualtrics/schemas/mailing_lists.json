@@ -1,6 +1,12 @@
 {
     "type": "object",
     "properties": {
+        "directoryId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
         "contactCount": {
             "type": [
                 "null",

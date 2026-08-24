@@ -21,7 +21,17 @@ class AuditEvents(FullTableStream):
         if not activity_type:
             return
         params = {"pageSize": self.page_size, "activityType": activity_type}
-        yield from self._paginate(self.path, params)
+        # /logs uses a cursor token in result.nextPage, not a full URL
+        while True:
+            response = self.client.get(self.path, params=params)
+            result = response.get("result") or {}
+            for element in (result.get("elements") or []):
+                element["activity_type"] = activity_type
+                yield element
+            next_token = result.get("nextPage")
+            if not next_token:
+                break
+            params = {"pageSize": self.page_size, "activityType": activity_type, "pageToken": next_token}
 
     def sync(self, state: Dict, transformer: Transformer, parent_id: Any = None) -> int:
         with metrics.record_counter(self.tap_stream_id) as counter:

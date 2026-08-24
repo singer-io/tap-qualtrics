@@ -1,6 +1,12 @@
 {
     "type": "object",
     "properties": {
+        "activity_type": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
         "id": {
             "type": [
                 "null",

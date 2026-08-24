@@ -1,4 +1,3 @@
-import time
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Iterator, List, Optional
 
@@ -13,7 +12,7 @@ from singer import (
     write_schema,
 )
 
-from tap_qualtrics.exceptions import QualtricsForbiddenError, QualtricsNotFoundError
+from tap_qualtrics.exceptions import QualtricsForbiddenError, QualtricsNotFoundError, QualtricsUnauthorizedError, QualtricsError
 
 LOGGER = get_logger()
 
@@ -55,7 +54,8 @@ class BaseStream(ABC):
             self.schema = {}
             self.mdata = {}
         if client:
-            self.page_size = client.page_size
+            # stream's class-level page_size is an endpoint-specific cap; never exceed it
+            self.page_size = min(client.page_size, type(self).page_size)
         self.child_to_sync: List["BaseStream"] = []
 
     # ------------------------------------------------------------------ #
@@ -80,21 +80,31 @@ class BaseStream(ABC):
             LOGGER.error("OS Error writing schema for: %s", self.tap_stream_id)
             raise err
 
-    def check_access(self) -> bool:
-        """Return True if credentials have read access to this stream; False on 403.
-        Child streams always return True — access is governed by the parent check.
-        Streams with no simple GET path (e.g. async export streams) are assumed accessible."""
-        if self.parent:
-            return True
+    def check_access(self, parent_record: Optional[Dict] = None) -> bool:
+        """Return True if credentials can read this stream. Child streams require a
+        parent_record to probe; without one they are assumed accessible."""
         path = getattr(self, "path", None)
         if not path:
             return True
-        try:
-            self.client.get(path, params={"pageSize": 1})
+        if self.parent and parent_record is None:
             return True
-        except (QualtricsForbiddenError, QualtricsNotFoundError) as exc:
+        try:
+            probe = self._make_probe_path(parent_record) if parent_record is not None else path
+            if not probe:
+                return True
+            self.client.get(probe, params={"pageSize": 1})
+            return True
+        except QualtricsError as exc:
             LOGGER.warning("Access check failed for stream '%s': %s", self.tap_stream_id, exc)
             return False
+
+    def _make_probe_path(self, parent_record: Dict) -> str:
+        """Build the probe URL for a given parent record (top-level: no substitution needed)."""
+        return getattr(self, "path", "")
+
+    def _enrich_sample(self, sample: Dict, parent_record: Dict) -> Dict:
+        """Inject parent context into a fetched sample so grandchild probes have the IDs they need."""
+        return sample
 
     # ------------------------------------------------------------------ #
     # Pagination                                                           #
@@ -132,12 +142,7 @@ class FullTableStream(BaseStream):
 
     def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
         """Override in subclasses to customise how records are fetched."""
-        path = self._build_path(parent_id)
-        yield from self._paginate(path)
-
-    def _build_path(self, parent_id: Any = None) -> str:
-        """Return the URL path for this stream, optionally parameterised."""
-        return self.path  # subclasses override or format with parent_id
+        yield from self._paginate(self.path)
 
     def sync(self, state: Dict, transformer: Transformer, parent_id: Any = None) -> int:
         with metrics.record_counter(self.tap_stream_id) as counter:
@@ -169,14 +174,10 @@ class IncrementalStream(BaseStream):
         return write_bookmark(state, self.tap_stream_id, bk, value)
 
     def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[Dict]:
-        path = self._build_path(parent_id)
         params: Dict = {}
         if bookmark:
             params["startDate"] = bookmark
-        yield from self._paginate(path, params)
-
-    def _build_path(self, parent_id: Any = None) -> str:
-        return self.path
+        yield from self._paginate(self.path, params)
 
     def sync(self, state: Dict, transformer: Transformer, parent_id: Any = None) -> int:
         bookmark = self.get_bookmark(state)
@@ -209,7 +210,13 @@ class SurveyChildStream(FullTableStream):
         if not survey_id:
             return
         path = self.path.format(survey_id=survey_id)
-        yield from self._paginate(path)
+        for record in self._paginate(path):
+            record["survey_id"] = survey_id
+            yield record
+
+    def _make_probe_path(self, parent_record: Dict) -> str:
+        survey_id = (parent_record or {}).get("id", "")
+        return self.path.format(survey_id=survey_id) if survey_id else ""
 
 
 class DirectoryChildStream(FullTableStream):
@@ -220,7 +227,16 @@ class DirectoryChildStream(FullTableStream):
         if not directory_id:
             return
         path = self.path.format(directory_id=directory_id)
-        yield from self._paginate(path)
+        for record in self._paginate(path):
+            record["directoryId"] = directory_id
+            yield record
+
+    def _make_probe_path(self, parent_record: Dict) -> str:
+        directory_id = (parent_record or {}).get("directoryId", "")
+        return self.path.format(directory_id=directory_id) if directory_id else ""
+
+    def _enrich_sample(self, sample: Dict, parent_record: Dict) -> Dict:
+        return {**sample, "_directory_id": (parent_record or {}).get("directoryId", "")}
 
 
 class IncrementalDirectoryChildStream(IncrementalStream):
@@ -235,8 +251,16 @@ class IncrementalDirectoryChildStream(IncrementalStream):
         if bookmark:
             params["startDate"] = bookmark
         for record in self._paginate(path, params):
+            record["directoryId"] = directory_id
             record["_directory_id"] = directory_id
             yield record
+
+    def _make_probe_path(self, parent_record: Dict) -> str:
+        directory_id = (parent_record or {}).get("directoryId", "")
+        return self.path.format(directory_id=directory_id) if directory_id else ""
+
+    def _enrich_sample(self, sample: Dict, parent_record: Dict) -> Dict:
+        return {**sample, "_directory_id": (parent_record or {}).get("directoryId", "")}
 
 
 class MailingListChildStream(FullTableStream):
@@ -252,6 +276,13 @@ class MailingListChildStream(FullTableStream):
         path = self.path.format(directory_id=directory_id, mailing_list_id=mailing_list_id)
         yield from self._paginate(path)
 
+    def _make_probe_path(self, parent_record: Dict) -> str:
+        directory_id = (parent_record or {}).get("_directory_id", "")
+        mailing_list_id = (parent_record or {}).get("mailingListId", "")
+        if directory_id and mailing_list_id:
+            return self.path.format(directory_id=directory_id, mailing_list_id=mailing_list_id)
+        return ""
+
 
 class GroupChildStream(FullTableStream):
     """Stream whose records are fetched once per group."""
@@ -261,7 +292,13 @@ class GroupChildStream(FullTableStream):
         if not group_id:
             return
         path = self.path.format(group_id=group_id)
-        yield from self._paginate(path)
+        for record in self._paginate(path):
+            record["groupId"] = group_id
+            yield record
+
+    def _make_probe_path(self, parent_record: Dict) -> str:
+        group_id = (parent_record or {}).get("id", "")
+        return self.path.format(group_id=group_id) if group_id else ""
 
 
 class LibraryChildStream(FullTableStream):
@@ -272,7 +309,13 @@ class LibraryChildStream(FullTableStream):
         if not library_id:
             return
         path = self.path.format(library_id=library_id)
-        yield from self._paginate(path)
+        for record in self._paginate(path):
+            record["libraryId"] = library_id
+            yield record
+
+    def _make_probe_path(self, parent_record: Dict) -> str:
+        library_id = (parent_record or {}).get("libraryId", "")
+        return self.path.format(library_id=library_id) if library_id else ""
 
 
 class SampleChildStream(FullTableStream):
@@ -286,7 +329,16 @@ class SampleChildStream(FullTableStream):
         if not directory_id or not sample_id:
             return
         path = self.path.format(directory_id=directory_id, sample_id=sample_id)
-        yield from self._paginate(path)
+        for record in self._paginate(path):
+            record["sampleId"] = sample_id
+            yield record
+
+    def _make_probe_path(self, parent_record: Dict) -> str:
+        directory_id = (parent_record or {}).get("_directory_id", "")
+        sample_id = (parent_record or {}).get("sampleId", (parent_record or {}).get("id", ""))
+        if directory_id and sample_id:
+            return self.path.format(directory_id=directory_id, sample_id=sample_id)
+        return ""
 
 
 class SegmentChildStream(FullTableStream):
@@ -300,7 +352,16 @@ class SegmentChildStream(FullTableStream):
         if not directory_id or not segment_id:
             return
         path = self.path.format(directory_id=directory_id, segment_id=segment_id)
-        yield from self._paginate(path)
+        for record in self._paginate(path):
+            record["segmentId"] = segment_id
+            yield record
+
+    def _make_probe_path(self, parent_record: Dict) -> str:
+        directory_id = (parent_record or {}).get("_directory_id", "")
+        segment_id = (parent_record or {}).get("segmentId", "")
+        if directory_id and segment_id:
+            return self.path.format(directory_id=directory_id, segment_id=segment_id)
+        return ""
 
 
 class ContactChildStream(FullTableStream):
@@ -316,6 +377,13 @@ class ContactChildStream(FullTableStream):
         path = self.path.format(directory_id=directory_id, contact_id=contact_id)
         yield from self._paginate(path)
 
+    def _make_probe_path(self, parent_record: Dict) -> str:
+        directory_id = (parent_record or {}).get("_directory_id", "")
+        contact_id = (parent_record or {}).get("contactId", "")
+        if directory_id and contact_id:
+            return self.path.format(directory_id=directory_id, contact_id=contact_id)
+        return ""
+
 
 class TicketChildStream(FullTableStream):
     """Stream whose records are fetched once per ticket."""
@@ -326,4 +394,8 @@ class TicketChildStream(FullTableStream):
             return
         path = self.path.format(ticket_id=ticket_id)
         yield from self._paginate(path)
+
+    def _make_probe_path(self, parent_record: Dict) -> str:
+        ticket_id = (parent_record or {}).get("key") or (parent_record or {}).get("ticketId") or (parent_record or {}).get("id", "")
+        return self.path.format(ticket_id=ticket_id) if ticket_id else ""
 

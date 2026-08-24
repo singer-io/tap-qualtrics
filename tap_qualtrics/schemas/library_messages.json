@@ -1,6 +1,9 @@
 {
     "type": "object",
     "properties": {
+        "libraryId": {
+            "type": ["null", "string"]
+        },
         "id": {
             "type": [
                 "null",

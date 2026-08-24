@@ -1,6 +1,12 @@
 {
     "type": "object",
     "properties": {
+        "distributionId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
         "contactId": {
             "type": [
                 "null",

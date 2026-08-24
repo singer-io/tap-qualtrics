@@ -6,7 +6,7 @@ class Distributions(IncrementalStream):
     tap_stream_id = "distributions"
     key_properties = ["id"]
     replication_method = "INCREMENTAL"
-    replication_keys = ["sendDate"]
+    replication_keys = ["modifiedDate"]
     data_key = "result.elements"
     path = "distributions"
     page_size = 100
@@ -18,10 +18,8 @@ class Distributions(IncrementalStream):
         if not survey_id:
             return
         params = {"surveyId": survey_id, "pageSize": self.page_size}
-        if bookmark:
-            params["sendStartDate"] = bookmark
         for record in self._paginate("distributions", params):
-            record["_survey_id"] = survey_id
+            record["survey_id"] = survey_id
             yield record
 
     def sync(self, state, transformer, parent_id=None):

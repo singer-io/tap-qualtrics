@@ -1,66 +1,47 @@
 {
     "type": "object",
     "properties": {
-        "directoryId": {
+        "key": {
             "type": [
                 "null",
                 "string"
             ]
         },
-        "contactId": {
+        "name": {
             "type": [
                 "null",
                 "string"
             ]
         },
-        "firstName": {
+        "ownerId": {
             "type": [
                 "null",
                 "string"
             ]
         },
-        "lastName": {
+        "status": {
+            "type": [
+                "null",
+                "integer"
+            ]
+        },
+        "priority": {
+            "type": [
+                "null",
+                "integer"
+            ]
+        },
+        "followUpDetailsSurveyId": {
             "type": [
                 "null",
                 "string"
             ]
         },
-        "email": {
+        "followUpDetailsResponseId": {
             "type": [
                 "null",
                 "string"
             ]
-        },
-        "phone": {
-            "type": [
-                "null",
-                "string"
-            ]
-        },
-        "extRef": {
-            "type": [
-                "null",
-                "string"
-            ]
-        },
-        "language": {
-            "type": [
-                "null",
-                "string"
-            ]
-        },
-        "directoryUnsubscribed": {
-            "type": [
-                "null",
-                "boolean"
-            ]
-        },
-        "directoryUnsubscribeDate": {
-            "type": [
-                "null",
-                "string"
-            ],
-            "format": "date-time"
         }
     }
 }

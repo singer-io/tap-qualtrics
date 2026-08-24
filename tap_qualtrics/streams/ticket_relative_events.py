@@ -7,4 +7,4 @@ class TicketRelativeEvents(TicketChildStream):
     replication_method = "FULL_TABLE"
     data_key = "result.elements"
     path = "tickets/{ticket_id}/events"
-    parent = "tickets_export"
+    parent = "tickets"

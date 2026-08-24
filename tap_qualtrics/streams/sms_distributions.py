@@ -18,4 +18,6 @@ class SmsDistributions(IncrementalStream):
         params = {"surveyId": survey_id, "pageSize": self.page_size}
         if bookmark:
             params["startDate"] = bookmark
-        yield from self._paginate(self.path, params)
+        for record in self._paginate(self.path, params):
+            record["survey_id"] = survey_id
+            yield record

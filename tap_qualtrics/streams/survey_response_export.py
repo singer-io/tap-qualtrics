@@ -6,7 +6,7 @@ import backoff
 from singer import Transformer, get_logger, metadata, metrics, write_record, write_schema
 
 from tap_qualtrics.streams.abstracts import IncrementalStream
-from tap_qualtrics.exceptions import QualtricsBackoffError
+from tap_qualtrics.exceptions import QualtricsBackoffError, QualtricsError
 from singer import get_logger
 LOGGER = get_logger()
 
@@ -24,7 +24,11 @@ class SurveyResponseExport(IncrementalStream):
         """Return (stream_name, schema, key_properties) for each survey that has response data."""
         from tap_qualtrics.schema import infer_schema
 
-        surveys_resp = client.get("surveys")
+        try:
+            surveys_resp = client.get("surveys")
+        except QualtricsError as exc:
+            LOGGER.warning("Cannot list surveys during discovery: %s", exc)
+            return []
         surveys = (surveys_resp.get("result") or {}).get("elements", [])
 
         @backoff.on_exception(backoff.expo, QualtricsBackoffError, max_tries=5, jitter=backoff.full_jitter)

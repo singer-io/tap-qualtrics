@@ -15,5 +15,7 @@ class OptedOutContacts(DirectoryChildStream):
         if not directory_id:
             return
         path = self.path.format(directory_id=directory_id)
-        yield from self._paginate(path, {"pageSize": self.page_size})
+        for record in self._paginate(path, {"pageSize": self.page_size}):
+            record["directoryId"] = directory_id
+            yield record
 
