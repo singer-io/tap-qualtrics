@@ -37,12 +37,16 @@ class TestParentChildSync(unittest.TestCase):
     @patch("tap_qualtrics.streams.abstracts.write_record")
     @patch("tap_qualtrics.streams.abstracts.BaseStream.is_selected", return_value=True)
     def test_child_sync_called_per_parent_record(self, mock_selected, mock_write_record):
-        parent = ConcreteParent(client=MagicMock(), catalog_entry=_make_entry())
+        client = MagicMock()
+        client.page_size = 100
+        parent = ConcreteParent(client=client, catalog_entry=_make_entry())
         parent.client.get.return_value = {
             "result": {"elements": [{"id": "P1"}, {"id": "P2"}], "nextPage": None}
         }
 
-        child = ConcreteChild(client=MagicMock(), catalog_entry=_make_entry())
+        child_client = MagicMock()
+        child_client.page_size = 100
+        child = ConcreteChild(client=child_client, catalog_entry=_make_entry())
         parent.child_to_sync = [child]
 
         transformer = MagicMock()
@@ -56,7 +60,9 @@ class TestParentChildSync(unittest.TestCase):
     @patch("tap_qualtrics.streams.abstracts.write_record")
     @patch("tap_qualtrics.streams.abstracts.BaseStream.is_selected", return_value=True)
     def test_parent_emits_own_records(self, mock_selected, mock_write_record):
-        parent = ConcreteParent(client=MagicMock(), catalog_entry=_make_entry())
+        client = MagicMock()
+        client.page_size = 100
+        parent = ConcreteParent(client=client, catalog_entry=_make_entry())
         parent.client.get.return_value = {
             "result": {"elements": [{"id": "P1"}], "nextPage": None}
         }

@@ -1,4 +1,4 @@
-from tap_qualtrics.streams.abstracts import LibraryChildStream
+﻿from tap_qualtrics.streams.abstracts import LibraryChildStream
 
 
 class LibraryMessages(LibraryChildStream):
@@ -8,4 +8,3 @@ class LibraryMessages(LibraryChildStream):
     data_key = "result.elements"
     path = "libraries/{library_id}/messages"
     parent = "libraries"
-

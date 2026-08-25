@@ -1,4 +1,4 @@
-import os
+﻿import os
 import json
 import re
 import singer
@@ -64,7 +64,7 @@ def load_schema_references() -> Dict:
 
     refs = {}
     for shared_schema_file in shared_file_names:
-        with open(os.path.join(shared_schema_path, shared_schema_file)) as data_file:
+        with open(os.path.join(shared_schema_path, shared_schema_file), encoding='utf-8') as data_file:
             refs["shared/" + shared_schema_file] = json.load(data_file)
 
     return refs
@@ -82,7 +82,7 @@ def get_schemas() -> Tuple[Dict, Dict]:
         if getattr(stream_obj, "dynamic_schema", False):
             continue  # catalog entries built at runtime via discover_dynamic_entries()
         schema_path = get_abs_path("schemas/{}.json".format(stream_name))
-        with open(schema_path) as file:
+        with open(schema_path, encoding='utf-8') as file:
             schema = json.load(file)
 
         schemas[stream_name] = schema
@@ -97,6 +97,9 @@ def get_schemas() -> Tuple[Dict, Dict]:
         )
         mdata = metadata.to_map(mdata)
 
+        if getattr(stream_obj, "parent", None):
+            mdata = metadata.write(mdata, (), "parent-tap-stream-id", stream_obj.parent)
+
         automatic_keys = getattr(stream_obj, "replication_keys") or []
         for field_name in schema.get("properties", {}).keys():
             if field_name in automatic_keys:
@@ -108,4 +111,3 @@ def get_schemas() -> Tuple[Dict, Dict]:
         field_metadata[stream_name] = mdata
 
     return schemas, field_metadata
-

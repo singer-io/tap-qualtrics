@@ -55,7 +55,7 @@ def _fetch_sample_record(client, path):
         result = resp.get("result") or {}
         elements = result.get("elements") or result.get("result") or []
         return elements[0] if elements else None
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         return None
 
 
@@ -82,7 +82,7 @@ def _apply_access_checks(client, schemas: dict, field_metadata: dict) -> None:
 
         # Fetch a sample record so this stream's children can be probed
         if parent_record is not None:
-            probe_path = instance._make_probe_path(parent_record)
+            probe_path = instance._make_probe_path(parent_record)  # pylint: disable=protected-access
         elif not stream_cls.parent:
             probe_path = getattr(instance, "path", None)
         else:
@@ -91,7 +91,7 @@ def _apply_access_checks(client, schemas: dict, field_metadata: dict) -> None:
         if probe_path:
             sample = _fetch_sample_record(client, probe_path)
             if sample:
-                parent_samples[name] = instance._enrich_sample(sample, parent_record or {})
+                parent_samples[name] = instance._enrich_sample(sample, parent_record or {})  # pylint: disable=protected-access
 
     for name in inaccessible:
         schemas.pop(name, None)
@@ -103,11 +103,12 @@ def _apply_access_checks(client, schemas: dict, field_metadata: dict) -> None:
         raise QualtricsForbiddenError(
             "HTTP-error-code: 403, Error: The credentials do not have 'read' access to any supported streams."
         )
-    elif inaccessible:
+    if inaccessible:
         LOGGER.warning(
             "No 'read' access to stream(s): %s. Excluded from catalog.",
             ", ".join(inaccessible),
         )
+    return inaccessible
 
 
 def discover(client=None) -> Catalog:
@@ -117,8 +118,9 @@ def discover(client=None) -> Catalog:
     """
     schemas, field_metadata = get_schemas()
 
+    skipped_no_access = []
     if client is not None:
-        _apply_access_checks(client, schemas, field_metadata)
+        skipped_no_access = list(_apply_access_checks(client, schemas, field_metadata) or [])
 
     catalog = Catalog([])
 
@@ -130,8 +132,8 @@ def discover(client=None) -> Catalog:
             mdata = field_metadata[stream_name]
         except Exception as err:
             LOGGER.error(err)
-            LOGGER.error("stream_name: {}".format(stream_name))
-            LOGGER.error("type schema_dict: {}".format(type(schema_dict)))
+            LOGGER.error("stream_name: %s", stream_name)
+            LOGGER.error("type schema_dict: %s", type(schema_dict))
             raise err
 
         key_properties = metadata.to_map(mdata).get((), {}).get("table-key-properties")
@@ -146,17 +148,28 @@ def discover(client=None) -> Catalog:
             )
         )
 
+    skipped_no_data = []
     if client is not None:
-        _add_dynamic_entries(client, catalog)
+        skipped_no_data = list(_add_dynamic_entries(client, catalog) or [])
+
+    all_skipped = skipped_no_access + skipped_no_data
+    if all_skipped:
+        LOGGER.info(
+            "Skipped streams summary (%d total): %s",
+            len(all_skipped),
+            ", ".join(all_skipped),
+        )
 
     return catalog
 
 
-def _add_dynamic_entries(client, catalog: Catalog) -> None:
-    """Append per-parent catalog entries for dynamic-schema streams."""
+def _add_dynamic_entries(client, catalog: Catalog) -> list:
+    """Append per-parent catalog entries for dynamic-schema streams; return skipped names."""
+    all_skipped = []
     for stream_cls in (AuditExport, SurveyResponseExport):
         try:
-            entries = stream_cls.discover_dynamic_entries(client)
+            entries, skipped = stream_cls.discover_dynamic_entries(client)
+            all_skipped.extend(skipped)
         except QualtricsError as exc:
             LOGGER.warning("Skipping dynamic entries for '%s' during discovery: %s", stream_cls.tap_stream_id, exc)
             continue
@@ -183,4 +196,4 @@ def _add_dynamic_entries(client, catalog: Catalog) -> None:
                     metadata=mdata,
                 )
             )
-
+    return all_skipped

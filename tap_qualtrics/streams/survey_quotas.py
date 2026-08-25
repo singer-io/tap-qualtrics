@@ -1,4 +1,4 @@
-from tap_qualtrics.streams.abstracts import SurveyChildStream
+﻿from tap_qualtrics.streams.abstracts import SurveyChildStream
 
 
 class SurveyQuotas(SurveyChildStream):
@@ -9,4 +9,3 @@ class SurveyQuotas(SurveyChildStream):
     path = "surveys/{survey_id}/quotas"
     page_size = 100
     parent = "surveys"
-

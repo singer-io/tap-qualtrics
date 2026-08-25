@@ -1,4 +1,4 @@
-from tap_qualtrics.streams.abstracts import IncrementalDirectoryChildStream
+﻿from tap_qualtrics.streams.abstracts import IncrementalDirectoryChildStream
 
 
 class Segments(IncrementalDirectoryChildStream):
@@ -11,4 +11,3 @@ class Segments(IncrementalDirectoryChildStream):
     page_size = 10
     parent = "directories"
     children = ["segment_contacts"]
-

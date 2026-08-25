@@ -1,4 +1,4 @@
-from tap_qualtrics.streams.abstracts import DirectoryChildStream
+﻿from tap_qualtrics.streams.abstracts import DirectoryChildStream
 
 
 class DirectoryContacts(DirectoryChildStream):
@@ -21,4 +21,3 @@ class DirectoryContacts(DirectoryChildStream):
             record["directoryId"] = directory_id
             record["_directory_id"] = directory_id
             yield record
-

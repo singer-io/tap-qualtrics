@@ -1,4 +1,4 @@
-from tap_qualtrics.streams.abstracts import FullTableStream
+﻿from tap_qualtrics.streams.abstracts import FullTableStream
 
 
 class User(FullTableStream):
@@ -17,4 +17,3 @@ class User(FullTableStream):
         record = resp.get("result", {})
         if record:
             yield record
-

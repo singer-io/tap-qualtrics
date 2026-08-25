@@ -1,4 +1,4 @@
-from tap_qualtrics.streams.abstracts import IncrementalStream
+﻿from tap_qualtrics.streams.abstracts import IncrementalStream
 
 
 class Surveys(IncrementalStream):
@@ -16,4 +16,3 @@ class Surveys(IncrementalStream):
         "survey_response_export",
         "distributions",
     ]
-

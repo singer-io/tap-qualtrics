@@ -1,4 +1,4 @@
-class QualtricsError(Exception):
+﻿class QualtricsError(Exception):
     """class representing Generic Http error."""
 
     def __init__(self, message=None, response=None):
@@ -9,52 +9,40 @@ class QualtricsError(Exception):
 
 class QualtricsBackoffError(QualtricsError):
     """class representing backoff error handling."""
-    pass
 
 class QualtricsBadRequestError(QualtricsError):
     """class representing 400 status code."""
-    pass
 
 class QualtricsUnauthorizedError(QualtricsError):
     """class representing 401 status code."""
-    pass
 
 
 class QualtricsForbiddenError(QualtricsError):
     """class representing 403 status code."""
-    pass
 
 class QualtricsNotFoundError(QualtricsError):
     """class representing 404 status code."""
-    pass
 
 class QualtricsConflictError(QualtricsError):
     """class representing 409 status code."""
-    pass
 
 class QualtricsUnprocessableEntityError(QualtricsBackoffError):
     """class representing 422 status code."""
-    pass
 
 class QualtricsRateLimitError(QualtricsBackoffError):
     """class representing 429 status code."""
-    pass
 
 class QualtricsInternalServerError(QualtricsBackoffError):
     """class representing 500 status code."""
-    pass
 
 class QualtricsNotImplementedError(QualtricsBackoffError):
     """class representing 501 status code."""
-    pass
 
 class QualtricsBadGatewayError(QualtricsBackoffError):
     """class representing 502 status code."""
-    pass
 
 class QualtricsServiceUnavailableError(QualtricsBackoffError):
     """class representing 503 status code."""
-    pass
 
 ERROR_CODE_EXCEPTION_MAPPING = {
     400: {
@@ -103,4 +91,3 @@ ERROR_CODE_EXCEPTION_MAPPING = {
         "message": "API service is currently unavailable."
     }
 }
-

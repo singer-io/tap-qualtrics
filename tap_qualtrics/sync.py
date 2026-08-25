@@ -1,4 +1,4 @@
-import singer
+﻿import singer
 from typing import Dict
 from singer import metadata
 from tap_qualtrics.streams import STREAMS
@@ -48,7 +48,7 @@ def write_schema(stream, client: Client, streams_to_sync: list, catalog: singer.
             stream.child_to_sync.append(child_obj)
 
 
-def sync(client: Client, config: Dict, catalog: singer.Catalog, state: Dict) -> None:
+def sync(client: Client, config: Dict, catalog: singer.Catalog, state: Dict) -> None:  # pylint: disable=unused-argument
     streams_to_sync = [s.stream for s in catalog.get_selected_streams(state)]
     LOGGER.info("Selected streams: %s", streams_to_sync)
 
@@ -85,7 +85,4 @@ def sync(client: Client, config: Dict, catalog: singer.Catalog, state: Dict) -> 
             singer.write_state(state)
 
             update_currently_syncing(state, None)
-            LOGGER.info("FINISHED Syncing: %s – %s records", stream_name, total)
-
-
-
+            LOGGER.info("FINISHED Syncing: %s - %s records", stream_name, total)

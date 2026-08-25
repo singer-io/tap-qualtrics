@@ -1,4 +1,4 @@
-from typing import Any, Dict, Iterator
+﻿from typing import Any, Dict, Iterator
 
 from tap_qualtrics.streams.abstracts import LibraryChildStream
 
@@ -32,4 +32,3 @@ class LibrariesSurveyQuestions(LibraryChildStream):
                     for question_id, question_value in questions.items()
                 ],
             }
-

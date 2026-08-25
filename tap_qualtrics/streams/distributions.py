@@ -39,6 +39,5 @@ class Distributions(IncrementalStream):
                         max_bk = record_bk
                 for child in self.child_to_sync:
                     child.sync(state=state, transformer=transformer, parent_id=record)
-        state = write_bookmark(state, self.tap_stream_id, self.replication_keys[0], max_bk)
-        return counter.value
-
+            state = write_bookmark(state, self.tap_stream_id, self.replication_keys[0], max_bk)
+            return counter.value

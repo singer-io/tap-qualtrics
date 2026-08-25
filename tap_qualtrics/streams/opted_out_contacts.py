@@ -18,4 +18,3 @@ class OptedOutContacts(DirectoryChildStream):
         for record in self._paginate(path, {"pageSize": self.page_size}):
             record["directoryId"] = directory_id
             yield record
-

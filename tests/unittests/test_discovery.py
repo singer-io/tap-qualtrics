@@ -166,6 +166,7 @@ class TestCheckAccess(unittest.TestCase):
     def test_child_stream_always_accessible(self):
         StreamCls = self._make_stream(parent="some_parent")
         mock_client = MagicMock()
+        mock_client.page_size = 100
         stream = StreamCls(client=mock_client)
         self.assertTrue(stream.check_access())
         mock_client.get.assert_not_called()
@@ -173,6 +174,7 @@ class TestCheckAccess(unittest.TestCase):
     def test_parent_stream_accessible(self):
         StreamCls = self._make_stream(parent=None, path="users")
         mock_client = MagicMock()
+        mock_client.page_size = 100
         mock_client.get.return_value = {"result": {"elements": []}}
         stream = StreamCls(client=mock_client)
         self.assertTrue(stream.check_access())
@@ -181,6 +183,7 @@ class TestCheckAccess(unittest.TestCase):
     def test_parent_stream_inaccessible_returns_false(self):
         StreamCls = self._make_stream(parent=None, path="users")
         mock_client = MagicMock()
+        mock_client.page_size = 100
         mock_client.get.side_effect = QualtricsForbiddenError("403 Forbidden")
         stream = StreamCls(client=mock_client)
         self.assertFalse(stream.check_access())
@@ -189,6 +192,7 @@ class TestCheckAccess(unittest.TestCase):
         from tap_qualtrics.exceptions import QualtricsNotFoundError
         StreamCls = self._make_stream(parent=None, path="ticket-exports")
         mock_client = MagicMock()
+        mock_client.page_size = 100
         mock_client.get.side_effect = QualtricsNotFoundError("404 Not Found")
         stream = StreamCls(client=mock_client)
         self.assertFalse(stream.check_access())

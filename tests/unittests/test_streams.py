@@ -1,13 +1,11 @@
 """Unit tests for stream pagination and async export flows."""
-import io
 import json
 import unittest
-import zipfile
 from unittest.mock import MagicMock, patch, call
 
 from tap_qualtrics.streams.abstracts import FullTableStream, _get_nested
 from tap_qualtrics.streams.survey_response_export import SurveyResponseExport as SurveyResponseExportStream
-from tap_qualtrics.streams.tickets_export import TicketsExport as TicketsExportStream
+from tap_qualtrics.streams.tickets import Tickets as TicketsStream
 
 
 # ---------------------------------------------------------------------------
@@ -55,7 +53,9 @@ class TestFullTableStreamPagination(unittest.TestCase):
             path = "test-resource"
             page_size = 2
 
-        stream = ConcreteStream(client=MagicMock(), catalog_entry=_make_catalog_entry())
+        client = MagicMock()
+        client.page_size = 100
+        stream = ConcreteStream(client=client, catalog_entry=_make_catalog_entry())
         stream.client.get.side_effect = pages
         return stream
 
@@ -82,22 +82,17 @@ class TestFullTableStreamPagination(unittest.TestCase):
 
 class TestSurveyResponseExport(unittest.TestCase):
 
-    def _make_zip(self, responses):
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w") as zf:
-            zf.writestr("responses.json", json.dumps({"responses": responses}))
-        buf.seek(0)
-        return buf
-
     def test_full_flow(self):
+        client = MagicMock()
+        client.page_size = 100
         stream = SurveyResponseExportStream(
-            client=MagicMock(), catalog_entry=_make_catalog_entry()
+            client=client, catalog_entry=_make_catalog_entry()
         )
         stream.client.start_date = "2020-01-01"
         stream.client.post.return_value = {"result": {"progressId": "pid1"}}
         stream.client.poll_export.return_value = {"result": {"status": "complete", "fileId": "fid1"}}
         file_resp = MagicMock()
-        file_resp.content = self._make_zip([{"responseId": "R_1", "recordedDate": "2021-01-01"}]).read()
+        file_resp.content = json.dumps({"responses": [{"responseId": "R_1", "recordedDate": "2021-01-01", "values": {"recordedDate": "2021-01-01"}}]}).encode()
         stream.client.get_file.return_value = file_resp
 
         records = list(stream.get_records(parent_id={"id": "SV_123"}))
@@ -110,8 +105,10 @@ class TestSurveyResponseExport(unittest.TestCase):
         stream.client.get_file.assert_called_once()
 
     def test_no_export_id_returns_empty(self):
+        client = MagicMock()
+        client.page_size = 100
         stream = SurveyResponseExportStream(
-            client=MagicMock(), catalog_entry=_make_catalog_entry()
+            client=client, catalog_entry=_make_catalog_entry()
         )
         stream.client.start_date = "2020-01-01"
         stream.client.post.return_value = {"result": {}}  # no progressId
@@ -120,27 +117,33 @@ class TestSurveyResponseExport(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Tickets Export (POST → poll → GET file)
+# Tickets (simple paginated full-table stream)
 # ---------------------------------------------------------------------------
 
-class TestTicketsExport(unittest.TestCase):
+class TestTickets(unittest.TestCase):
 
-    def test_full_flow(self):
-        stream = TicketsExportStream(
-            client=MagicMock(), catalog_entry=_make_catalog_entry()
-        )
-        stream.client.start_date = "2020-01-01"
-        stream.client.post.return_value = {"result": {"exportId": "eid1"}}
-        stream.client.poll_export.return_value = {"result": {"status": "complete", "fileId": "fid1"}}
-        file_resp = MagicMock()
-        file_resp.json.return_value = [{"ticketId": "T_1", "updatedAt": "2021-01-01"}]
-        stream.client.get_file.return_value = file_resp
-
-        records = list(stream.get_records(start_date="2020-01-01"))
-
+    def test_get_records_passes_all_tickets_param(self):
+        client = MagicMock()
+        client.page_size = 100
+        stream = TicketsStream(client=client, catalog_entry=_make_catalog_entry())
+        stream.client.get.return_value = {
+            "result": {"elements": [{"key": "TKT_1"}], "nextPage": None}
+        }
+        records = list(stream.get_records())
         assert len(records) == 1
-        assert records[0]["ticketId"] == "T_1"
-        stream.client.poll_export.assert_called_once_with("ticket-exports/eid1/status")
+        assert records[0]["key"] == "TKT_1"
+        call_kwargs = stream.client.get.call_args[1]
+        assert call_kwargs["params"]["allTickets"] == "true"
+
+    def test_get_records_empty(self):
+        client = MagicMock()
+        client.page_size = 100
+        stream = TicketsStream(client=client, catalog_entry=_make_catalog_entry())
+        stream.client.get.return_value = {
+            "result": {"elements": [], "nextPage": None}
+        }
+        records = list(stream.get_records())
+        assert records == []
 
 
 if __name__ == "__main__":

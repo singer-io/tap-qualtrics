@@ -8,8 +8,9 @@ from tap_qualtrics.exceptions import *
 
 
 default_config = {
-    "api_token": "dummy_token",
-    "data_center": "iad1",
+    "clientId": "dummy_client",
+    "clientSecret": "dummy_secret",
+    "dataCenter": "iad1",
     "start_date": "2020-01-01",
     "request_timeout": 30,
 }
@@ -71,13 +72,17 @@ class TestClient(unittest.TestCase):
         client = Client(default_config)
         assert client.base_url == "https://iad1.qualtrics.com/API/v3"
 
-    def test_client_auth_header(self):
+    @patch("tap_qualtrics.client.Client._obtain_oauth_token")
+    def test_client_auth_header(self, mock_oauth):
+        mock_oauth.return_value = None
         client = Client(default_config)
         headers = client._get_headers()
-        assert headers["X-API-TOKEN"] == "dummy_token"
-        assert "Authorization" not in headers
+        assert "Content-Type" in headers
+        assert "X-API-TOKEN" not in headers
 
-    def test_client_get_calls_make_request(self):
+    @patch("tap_qualtrics.client.Client._obtain_oauth_token")
+    def test_client_get_calls_make_request(self, mock_oauth):
+        mock_oauth.return_value = None
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"data": "ok"}
         mock_resp.status_code = 200
@@ -85,7 +90,9 @@ class TestClient(unittest.TestCase):
             result = self.client.get("users")
         assert result == {"data": "ok"}
 
-    def test_client_post_calls_make_request(self):
+    @patch("tap_qualtrics.client.Client._obtain_oauth_token")
+    def test_client_post_calls_make_request(self, mock_oauth):
+        mock_oauth.return_value = None
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"created": True}
         mock_resp.status_code = 200
@@ -120,8 +127,10 @@ class TestClient(unittest.TestCase):
                 self.client._make_request("GET", "https://api.example.com/resource")
             self.assertGreater(mock_request.call_count, 1)
 
+    @patch("tap_qualtrics.client.Client._obtain_oauth_token")
     @patch("time.sleep")
-    def test_poll_export_success(self, mock_sleep):
+    def test_poll_export_success(self, mock_sleep, mock_oauth):
+        mock_oauth.return_value = None
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"result": {"status": "complete", "fileId": "f1"}}
@@ -129,8 +138,10 @@ class TestClient(unittest.TestCase):
             result = self.client.poll_export("audit-exports/abc123")
         assert result["result"]["fileId"] == "f1"
 
+    @patch("tap_qualtrics.client.Client._obtain_oauth_token")
     @patch("time.sleep")
-    def test_poll_export_timeout(self, mock_sleep):
+    def test_poll_export_timeout(self, mock_sleep, mock_oauth):
+        mock_oauth.return_value = None
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"result": {"status": "inProgress"}}

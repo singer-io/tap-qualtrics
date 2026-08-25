@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+﻿from abc import ABC, abstractmethod
 from typing import Any, Dict, Iterator, List, Optional
 
 from singer import (
@@ -12,7 +12,7 @@ from singer import (
     write_schema,
 )
 
-from tap_qualtrics.exceptions import QualtricsForbiddenError, QualtricsNotFoundError, QualtricsUnauthorizedError, QualtricsError
+from tap_qualtrics.exceptions import QualtricsError
 
 LOGGER = get_logger()
 
@@ -35,6 +35,7 @@ class BaseStream(ABC):
     replication_method: str = "FULL_TABLE"
     replication_keys: List[str] = []
     http_method: str = "GET"
+    path: str = ""
     # dot-path into the response JSON where the list of records lives
     data_key: str = "result.elements"
     # dot-path into the response JSON for the next-page URL/token
@@ -98,11 +99,11 @@ class BaseStream(ABC):
             LOGGER.warning("Access check failed for stream '%s': %s", self.tap_stream_id, exc)
             return False
 
-    def _make_probe_path(self, parent_record: Dict) -> str:
+    def _make_probe_path(self, parent_record: Dict) -> str:  # pylint: disable=unused-argument
         """Build the probe URL for a given parent record (top-level: no substitution needed)."""
         return getattr(self, "path", "")
 
-    def _enrich_sample(self, sample: Dict, parent_record: Dict) -> Dict:
+    def _enrich_sample(self, sample: Dict, parent_record: Dict) -> Dict:  # pylint: disable=unused-argument
         """Inject parent context into a fetched sample so grandchild probes have the IDs they need."""
         return sample
 
@@ -140,7 +141,7 @@ class BaseStream(ABC):
 class FullTableStream(BaseStream):
     """Full-table stream: dumps all records on every sync."""
 
-    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
+    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:  # pylint: disable=unused-argument
         """Override in subclasses to customise how records are fetched."""
         yield from self._paginate(self.path)
 
@@ -153,7 +154,7 @@ class FullTableStream(BaseStream):
                     counter.increment()
                 for child in self.child_to_sync:
                     child.sync(state=state, transformer=transformer, parent_id=record)
-        return counter.value
+            return counter.value
 
 
 class IncrementalStream(BaseStream):
@@ -173,7 +174,7 @@ class IncrementalStream(BaseStream):
         value = max(current, value)
         return write_bookmark(state, self.tap_stream_id, bk, value)
 
-    def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[Dict]:
+    def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[Dict]:  # pylint: disable=unused-argument
         params: Dict = {}
         if bookmark:
             params["startDate"] = bookmark
@@ -194,8 +195,8 @@ class IncrementalStream(BaseStream):
                         max_bk = record_bk
                     for child in self.child_to_sync:
                         child.sync(state=state, transformer=transformer, parent_id=record)
-        state = self.write_bookmark(state, max_bk)
-        return counter.value
+            state = self.write_bookmark(state, max_bk)
+            return counter.value
 
 
 # ------------------------------------------------------------------ #
@@ -398,4 +399,3 @@ class TicketChildStream(FullTableStream):
     def _make_probe_path(self, parent_record: Dict) -> str:
         ticket_id = (parent_record or {}).get("key") or (parent_record or {}).get("ticketId") or (parent_record or {}).get("id", "")
         return self.path.format(ticket_id=ticket_id) if ticket_id else ""
-

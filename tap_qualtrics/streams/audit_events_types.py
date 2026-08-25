@@ -1,4 +1,4 @@
-from tap_qualtrics.streams.abstracts import FullTableStream
+﻿from tap_qualtrics.streams.abstracts import FullTableStream
 
 
 class AuditEventsTypes(FullTableStream):
@@ -8,4 +8,3 @@ class AuditEventsTypes(FullTableStream):
     data_key = "result.elements"
     path = "logs/activitytypes"
     children = ["audit_events"]
-

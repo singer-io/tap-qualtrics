@@ -1,4 +1,4 @@
-from tap_qualtrics.streams.abstracts import SegmentChildStream
+﻿from tap_qualtrics.streams.abstracts import SegmentChildStream
 
 
 class SegmentContacts(SegmentChildStream):
@@ -9,4 +9,3 @@ class SegmentContacts(SegmentChildStream):
     path = "directories/{directory_id}/segments/{segment_id}/contacts"
     page_size = 50
     parent = "segments"
-

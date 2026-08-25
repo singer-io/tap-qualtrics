@@ -1,4 +1,4 @@
-from tap_qualtrics.streams.abstracts import FullTableStream
+﻿from tap_qualtrics.streams.abstracts import FullTableStream
 
 
 class Directories(FullTableStream):
@@ -18,4 +18,3 @@ class Directories(FullTableStream):
         "segments",
         "transaction_batches"
     ]
-

@@ -16,8 +16,10 @@ class TestIncrementalSync(unittest.TestCase):
         mock_catalog = MagicMock()
         mock_catalog.schema.to_dict.return_value = {"type": "object", "properties": {}}
         mock_catalog.metadata = []
+        mock_client = MagicMock()
+        mock_client.page_size = 100
         self.stream = ConcreteIncrementalStream(
-            client=MagicMock(), catalog_entry=mock_catalog
+            client=mock_client, catalog_entry=mock_catalog
         )
         self.stream.client.start_date = "2020-01-01"
 

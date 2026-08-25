@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 import json
 import singer
 from tap_qualtrics.client import Client
@@ -42,4 +42,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

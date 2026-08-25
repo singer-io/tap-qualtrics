@@ -1,4 +1,4 @@
-from tap_qualtrics.streams.directories_contacts import DirectoryContacts
+﻿from tap_qualtrics.streams.directories_contacts import DirectoryContacts
 from tap_qualtrics.streams.users import Users
 from tap_qualtrics.streams.user import User
 from tap_qualtrics.streams.groups import Groups
@@ -113,5 +113,3 @@ STREAMS = {
     "ticket_retrieve_events": TicketRetrieveEvents,
     "ticket_root_causes": TicketRootCauses,
 }
-
-

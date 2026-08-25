@@ -1,4 +1,4 @@
-from tap_qualtrics.streams.abstracts import FullTableStream
+﻿from tap_qualtrics.streams.abstracts import FullTableStream
 
 
 class Users(FullTableStream):
@@ -9,4 +9,3 @@ class Users(FullTableStream):
     path = "users"
     page_size = 100
     children = ["user"]
-

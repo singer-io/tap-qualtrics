@@ -5,7 +5,7 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 
 import backoff
 import requests
-from requests.exceptions import ChunkedEncodingError, ConnectionError, Timeout
+from requests.exceptions import ChunkedEncodingError, ConnectionError as RequestsConnectionError, Timeout
 from singer import get_logger, metrics
 
 from tap_qualtrics.exceptions import (ERROR_CODE_EXCEPTION_MAPPING,
@@ -22,7 +22,7 @@ def raise_for_error(response: requests.Response) -> None:
     """Raise the appropriate exception for non-2xx responses."""
     try:
         response_json = response.json()
-    except Exception:
+    except (ValueError, AttributeError):
         response_json = {}
     if response.status_code not in [200, 201, 204]:
         if response_json.get("error"):
@@ -170,7 +170,7 @@ class Client:
         wait_gen=backoff.expo,
         exception=(
             ConnectionResetError,
-            ConnectionError,
+            RequestsConnectionError,
             ChunkedEncodingError,
             Timeout,
             QualtricsBackoffError,
@@ -216,7 +216,7 @@ class Client:
         interval: int = POLL_INTERVAL,
     ) -> Any:
         """Poll an async export status endpoint until status == 'complete'."""
-        for attempt in range(max_attempts):
+        for _ in range(max_attempts):
             response = self.get(status_path)
             status = (response.get("result") or {}).get("status", "")
             if status.lower() in ("complete", "completed"):

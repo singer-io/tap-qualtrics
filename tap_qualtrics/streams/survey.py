@@ -1,4 +1,4 @@
-from tap_qualtrics.streams.abstracts import SurveyChildStream
+﻿from tap_qualtrics.streams.abstracts import SurveyChildStream
 
 
 class Survey(SurveyChildStream):
@@ -19,4 +19,3 @@ class Survey(SurveyChildStream):
         if record:
             record["_survey_id"] = survey_id
             yield record
-

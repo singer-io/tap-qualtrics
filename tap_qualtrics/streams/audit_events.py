@@ -1,4 +1,4 @@
-from typing import Any, Dict
+﻿from typing import Any, Dict
 
 from singer import Transformer, get_logger, metrics, write_record
 
@@ -40,5 +40,4 @@ class AuditEvents(FullTableStream):
                 if self.is_selected():
                     write_record(self.tap_stream_id, transformed)
                     counter.increment()
-        return counter.value
-
+            return counter.value

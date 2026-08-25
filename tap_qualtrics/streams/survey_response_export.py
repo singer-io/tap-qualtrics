@@ -1,13 +1,12 @@
 import json
-from typing import Any, Dict, Iterator, List
+from typing import Any, Dict, Iterator
 
 import backoff
+from singer import Transformer, get_bookmark, get_logger, metadata, metrics, write_bookmark, write_record, write_schema
 
-from singer import Transformer, get_logger, metadata, metrics, write_record, write_schema
-
-from tap_qualtrics.streams.abstracts import IncrementalStream
 from tap_qualtrics.exceptions import QualtricsBackoffError, QualtricsError
-from singer import get_logger
+from tap_qualtrics.streams.abstracts import IncrementalStream
+
 LOGGER = get_logger()
 
 class SurveyResponseExport(IncrementalStream):
@@ -20,15 +19,14 @@ class SurveyResponseExport(IncrementalStream):
     dynamic_schema = True
 
     @classmethod
-    def discover_dynamic_entries(cls, client) -> List[Dict]:
-        """Return (stream_name, schema, key_properties) for each survey that has response data."""
-        from tap_qualtrics.schema import infer_schema
-
+    def discover_dynamic_entries(cls, client):
+        """Return ((stream_name, schema, key_properties)[], skipped_ids[]) for each survey."""
+        from tap_qualtrics.schema import infer_schema  # pylint: disable=import-outside-toplevel
         try:
             surveys_resp = client.get("surveys")
         except QualtricsError as exc:
             LOGGER.warning("Cannot list surveys during discovery: %s", exc)
-            return []
+            return [], []
         surveys = (surveys_resp.get("result") or {}).get("elements", [])
 
         @backoff.on_exception(backoff.expo, QualtricsBackoffError, max_tries=5, jitter=backoff.full_jitter)
@@ -53,10 +51,11 @@ class SurveyResponseExport(IncrementalStream):
             try:
                 data = json.loads(resp.content)
                 return data.get("responses", [])
-            except Exception:
+            except (json.JSONDecodeError, ValueError):
                 return []
 
         entries = []
+        skipped = []
         for survey in surveys:
             survey_id = survey.get("id") if isinstance(survey, dict) else survey
             if not survey_id:
@@ -66,13 +65,16 @@ class SurveyResponseExport(IncrementalStream):
                 records = _fetch_records(survey_id)
             except QualtricsBackoffError:
                 LOGGER.warning("Skipping survey '%s' from catalog: still rate limited after retries.", survey_id)
+                skipped.append(survey_id)
                 continue
-            except Exception as exc:
+            except Exception as exc:  # pylint: disable=broad-exception-caught
                 LOGGER.warning("Skipping survey '%s' from catalog: %s", survey_id, exc)
+                skipped.append(survey_id)
                 continue
 
             if not records:
                 LOGGER.info("Skipping survey '%s' from catalog: no data available in the discovery window.", survey_id)
+                skipped.append(survey_id)
                 continue
 
             for record in records:
@@ -83,7 +85,7 @@ class SurveyResponseExport(IncrementalStream):
             entries.append((f"survey_response_export__{survey_id}", schema, cls.key_properties))
             LOGGER.info("Discovered schema for survey_response_export__%s (%d sample records).", survey_id, len(records))
 
-        return entries
+        return entries, skipped
 
 
     def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[Dict]:
@@ -135,8 +137,7 @@ class SurveyResponseExport(IncrementalStream):
         mdata = metadata.to_map(catalog_entry.metadata)
         write_schema(dynamic_id, schema, self.key_properties)
 
-        from singer import get_bookmark as _get_bookmark, write_bookmark as _write_bookmark
-        bookmark = _get_bookmark(state, dynamic_id, self.replication_keys[0], self.client.start_date)
+        bookmark = get_bookmark(state, dynamic_id, self.replication_keys[0], self.client.start_date)
         max_bk = bookmark
 
         with metrics.record_counter(dynamic_id) as counter:
@@ -146,8 +147,7 @@ class SurveyResponseExport(IncrementalStream):
                 if rec_bk >= bookmark:
                     write_record(dynamic_id, transformed)
                     counter.increment()
-                    if rec_bk > max_bk:
-                        max_bk = rec_bk
+                    max_bk = max(max_bk, rec_bk)
 
-        state = _write_bookmark(state, dynamic_id, self.replication_keys[0], max_bk)
-        return counter.value
+            state = write_bookmark(state, dynamic_id, self.replication_keys[0], max_bk)
+            return counter.value
