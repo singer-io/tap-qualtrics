@@ -1,7 +1,7 @@
 ﻿import io
 import json
 import zipfile
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Dict, Iterator
 
 import backoff
@@ -28,9 +28,6 @@ class AuditExport(IncrementalStream):
         """Return ((stream_name, schema, key_properties)[], skipped_names[]) for each event type."""
         from tap_qualtrics.schema import infer_schema  # pylint: disable=import-outside-toplevel
 
-        discovery_start = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        discovery_end = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
         try:
             resp = client.get("audit-events")
         except QualtricsError as exc:
@@ -38,9 +35,12 @@ class AuditExport(IncrementalStream):
             return [], []
         event_types = (resp.get("result") or {}).get("elements", [])
 
+        discovery_start = client.start_date
+        discovery_end = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
         @backoff.on_exception(backoff.expo, QualtricsBackoffError, max_tries=5, jitter=backoff.full_jitter)
         def _fetch_records(event_name):
-            """Run one full export cycle; QualtricsBackoffError triggers exponential retry."""
+            """Fetch all records in a single request; retries on rate limit."""
             body = {"eventName": event_name, "startDate": discovery_start, "endDate": discovery_end}
             start = client.post("audit-exports", body)
             export_id = (start.get("result") or {}).get("id", "")
@@ -79,7 +79,7 @@ class AuditExport(IncrementalStream):
                 continue
 
             if not records:
-                LOGGER.info("Skipping '%s' from catalog: no data available in the discovery window.", event_name)
+                LOGGER.info("Skipping '%s' from catalog: no data found in discovery window.", event_name)
                 skipped.append(event_name)
                 continue
 
@@ -90,64 +90,51 @@ class AuditExport(IncrementalStream):
         return entries, skipped
 
 
-    def _month_windows(self, start_date: str):
-        """Yield (start, end) month-boundary pairs from start_date up to now."""
-        from dateutil.relativedelta import relativedelta  # pylint: disable=import-outside-toplevel
-        from dateutil.parser import parse as parse_date  # pylint: disable=import-outside-toplevel
-        start = parse_date(start_date).replace(day=1, hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
-        now = datetime.now(timezone.utc)
-        while start < now:
-            end = start + relativedelta(months=1)
-            yield (
-                start.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                min(end, now).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            )
-            start = end
-
     def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[Dict]:
-        sd = bookmark or self.client.start_date
         event_name = (parent_id or {}).get("name") if isinstance(parent_id, dict) else parent_id
         if not event_name:
             return
 
-        for window_start, window_end in self._month_windows(sd):
-            body = {"eventName": event_name, "startDate": window_start, "endDate": window_end}
-            try:
-                start = self.client.post("audit-exports", body)
-            except QualtricsBadRequestError:
-                LOGGER.warning("Skipping unsupported audit export eventName: %s", event_name)
-                return  # skip remaining windows for this event_name
-            # API returns 'id', not 'exportId'
-            export_id = (start.get("result") or {}).get("id", "")
-            if not export_id:
-                continue
+        start_date = bookmark or self.client.start_date
+        end_date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        body = {"eventName": event_name, "startDate": start_date, "endDate": end_date}
+        try:
+            start = self.client.post("audit-exports", body)
+        except QualtricsBadRequestError:
+            LOGGER.warning("Skipping unsupported audit export eventName: %s", event_name)
+            return
 
-            final = self.client.poll_export(f"audit-exports/{export_id}")
-            file_id = (final.get("result") or {}).get("fileId", export_id)
+        # API returns 'id', not 'exportId'
+        export_id = (start.get("result") or {}).get("id", "")
+        if not export_id:
+            return
 
-            resp = self.client.get_file(f"audit-exports/{export_id}/files/{file_id}")
-            if not resp.content:
-                continue
-            try:
-                # File is NDJSON: one JSON object per line
-                for line in resp.content.splitlines():
-                    line = line.strip()
-                    if line:
-                        yield json.loads(line)
-                continue
-            except (json.JSONDecodeError, ValueError):
-                pass
-            try:
-                records = resp.json()
-            except Exception:  # pylint: disable=broad-exception-caught
-                zf = zipfile.ZipFile(io.BytesIO(resp.content))
-                records = []
-                for name in zf.namelist():
-                    records.extend(json.loads(zf.read(name)))
-            if isinstance(records, list):
-                yield from records
-            elif isinstance(records, dict):
-                yield from records.get("events", [records])
+        final = self.client.poll_export(f"audit-exports/{export_id}")
+        file_id = (final.get("result") or {}).get("fileId", export_id)
+
+        resp = self.client.get_file(f"audit-exports/{export_id}/files/{file_id}")
+        if not resp.content:
+            return
+        try:
+            # File is NDJSON: one JSON object per line
+            for line in resp.content.splitlines():
+                line = line.strip()
+                if line:
+                    yield json.loads(line)
+            return
+        except (json.JSONDecodeError, ValueError):
+            pass
+        try:
+            records = resp.json()
+        except Exception:  # pylint: disable=broad-exception-caught
+            zf = zipfile.ZipFile(io.BytesIO(resp.content))
+            records = []
+            for name in zf.namelist():
+                records.extend(json.loads(zf.read(name)))
+        if isinstance(records, list):
+            yield from records
+        elif isinstance(records, dict):
+            yield from records.get("events", [records])
 
     def sync(self, state: Dict, transformer: Transformer, parent_id: Any = None) -> int:
         event_name = (parent_id or {}).get("name") if isinstance(parent_id, dict) else parent_id
