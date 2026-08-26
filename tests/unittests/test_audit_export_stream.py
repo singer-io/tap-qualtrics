@@ -3,7 +3,7 @@ import io
 import json
 import zipfile
 import unittest
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch, call
 
 from tap_qualtrics.streams.audit_export import AuditExport
@@ -40,35 +40,6 @@ def _make_catalog(stream_name, selected=True):
 
 
 # ---------------------------------------------------------------------------
-# _month_windows
-# ---------------------------------------------------------------------------
-
-class TestMonthWindows(unittest.TestCase):
-
-    def _stream(self):
-        return AuditExport(client=_make_client(), catalog_entry=_make_entry())
-
-    def test_yields_windows_from_start_to_now(self):
-        stream = self._stream()
-        windows = list(stream._month_windows("2020-01-01"))
-        self.assertGreater(len(windows), 0)
-        start, end = windows[0]
-        self.assertTrue(start.startswith("2020-01"))
-
-    def test_each_window_start_before_end(self):
-        stream = self._stream()
-        for start, end in stream._month_windows("2021-01-01"):
-            self.assertLess(start, end)
-
-    def test_single_month_recent_start(self):
-        # Start 2 months ago → should have 2 windows
-        start_date = (datetime.now(timezone.utc) - timedelta(days=45)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        stream = self._stream()
-        windows = list(stream._month_windows(start_date))
-        self.assertGreaterEqual(len(windows), 1)
-
-
-# ---------------------------------------------------------------------------
 # get_records
 # ---------------------------------------------------------------------------
 
@@ -90,8 +61,7 @@ class TestAuditExportGetRecords(unittest.TestCase):
         file_resp.content = b'{"id": "e1", "timestamp": "2021-01-01"}\n{"id": "e2", "timestamp": "2021-01-02"}\n'
         stream.client.get_file.return_value = file_resp
 
-        with patch.object(stream, "_month_windows", return_value=[("2021-01-01T00:00:00Z", "2021-02-01T00:00:00Z")]):
-            records = list(stream.get_records(parent_id={"name": "login"}))
+        records = list(stream.get_records(parent_id={"name": "login"}))
 
         self.assertEqual(len(records), 2)
         self.assertEqual(records[0]["id"], "e1")
@@ -104,31 +74,24 @@ class TestAuditExportGetRecords(unittest.TestCase):
         file_resp.content = b""
         stream.client.get_file.return_value = file_resp
 
-        with patch.object(stream, "_month_windows", return_value=[("2021-01-01T00:00:00Z", "2021-02-01T00:00:00Z")]):
-            records = list(stream.get_records(parent_id={"name": "login"}))
+        records = list(stream.get_records(parent_id={"name": "login"}))
 
         self.assertEqual(records, [])
 
-    def test_bad_request_skips_remaining_windows(self):
+    def test_bad_request_returns_empty(self):
         stream = self._stream()
         stream.client.post.side_effect = QualtricsBadRequestError("bad request")
 
-        with patch.object(stream, "_month_windows", return_value=[
-            ("2021-01-01T00:00:00Z", "2021-02-01T00:00:00Z"),
-            ("2021-02-01T00:00:00Z", "2021-03-01T00:00:00Z"),
-        ]):
-            records = list(stream.get_records(parent_id="login"))
+        records = list(stream.get_records(parent_id="login"))
 
-        # Should stop after the first bad request
         self.assertEqual(stream.client.post.call_count, 1)
         self.assertEqual(records, [])
 
-    def test_no_export_id_skips_window(self):
+    def test_no_export_id_returns_empty(self):
         stream = self._stream()
         stream.client.post.return_value = {"result": {}}  # no id
 
-        with patch.object(stream, "_month_windows", return_value=[("2021-01-01T00:00:00Z", "2021-02-01T00:00:00Z")]):
-            records = list(stream.get_records(parent_id="login"))
+        records = list(stream.get_records(parent_id="login"))
 
         self.assertEqual(records, [])
         stream.client.poll_export.assert_not_called()
@@ -142,8 +105,7 @@ class TestAuditExportGetRecords(unittest.TestCase):
         file_resp.json.return_value = [{"id": "e1", "timestamp": "2021-01-01"}]
         stream.client.get_file.return_value = file_resp
 
-        with patch.object(stream, "_month_windows", return_value=[("2021-01-01T00:00:00Z", "2021-02-01T00:00:00Z")]):
-            records = list(stream.get_records(parent_id="login"))
+        records = list(stream.get_records(parent_id="login"))
 
         self.assertEqual(len(records), 1)
 
@@ -156,8 +118,7 @@ class TestAuditExportGetRecords(unittest.TestCase):
         file_resp.json.return_value = {"events": [{"id": "e1"}]}
         stream.client.get_file.return_value = file_resp
 
-        with patch.object(stream, "_month_windows", return_value=[("2021-01-01T00:00:00Z", "2021-02-01T00:00:00Z")]):
-            records = list(stream.get_records(parent_id="login"))
+        records = list(stream.get_records(parent_id="login"))
 
         self.assertEqual(len(records), 1)
 
@@ -175,8 +136,7 @@ class TestAuditExportGetRecords(unittest.TestCase):
         file_resp.json.side_effect = Exception("not json")
         stream.client.get_file.return_value = file_resp
 
-        with patch.object(stream, "_month_windows", return_value=[("2021-01-01T00:00:00Z", "2021-02-01T00:00:00Z")]):
-            records = list(stream.get_records(parent_id="login"))
+        records = list(stream.get_records(parent_id="login"))
 
         self.assertEqual(len(records), 1)
 
