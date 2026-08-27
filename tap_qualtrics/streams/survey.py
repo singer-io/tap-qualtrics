@@ -1,16 +1,17 @@
-﻿from tap_qualtrics.streams.abstracts import SurveyChildStream
+﻿from tap_qualtrics.streams.abstracts import IncrementalStream
 
 
-class Survey(SurveyChildStream):
+class Survey(IncrementalStream):
     """Full survey definition per survey – replaces old 'survey' stream."""
     tap_stream_id = "survey"
-    key_properties = ["SurveyID"]
-    replication_method = "FULL_TABLE"
+    key_properties = ["id"]
+    replication_method = "INCREMENTAL"
+    replication_keys = ["lastModifiedDate"]
     data_key = "result"
     path = "surveys/{survey_id}"
     parent = "surveys"
 
-    def get_records(self, parent_id=None):
+    def get_records(self, parent_id=None, bookmark: str = ""):
         survey_id = (parent_id or {}).get("id") or parent_id
         if not survey_id:
             return

@@ -173,27 +173,31 @@ def _add_dynamic_entries(client, catalog: Catalog) -> list:
         except QualtricsError as exc:
             LOGGER.warning("Skipping dynamic entries for '%s' during discovery: %s", stream_cls.tap_stream_id, exc)
             continue
+        replication_method = getattr(stream_cls, "replication_method", "FULL_TABLE")
+        replication_keys = getattr(stream_cls, "replication_keys", None) or []
+        parent_stream = getattr(stream_cls, "parent", None)
         for stream_name, schema_dict, key_props in entries:
-            mdata = metadata.to_list(
-                metadata.write(
-                    metadata.write(
-                        metadata.new(),
-                        (),
-                        "table-key-properties",
-                        key_props,
-                    ),
-                    (),
-                    "selected",
-                    False,
+            mdata = metadata.to_map(
+                metadata.get_standard_metadata(
+                    schema=schema_dict,
+                    key_properties=key_props,
+                    valid_replication_keys=replication_keys,
+                    replication_method=replication_method,
                 )
             )
+            if parent_stream:
+                mdata = metadata.write(mdata, (), "parent-tap-stream-id", parent_stream)
+            for field_name in replication_keys:
+                if field_name in schema_dict.get("properties", {}):
+                    mdata = metadata.write(mdata, ("properties", field_name), "inclusion", "automatic")
+            mdata = metadata.write(mdata, (), "selected", False)
             catalog.streams.append(
                 CatalogEntry(
                     stream=stream_name,
                     tap_stream_id=stream_name,
                     key_properties=key_props,
                     schema=Schema.from_dict(schema_dict),
-                    metadata=mdata,
+                    metadata=metadata.to_list(mdata),
                 )
             )
     return all_skipped

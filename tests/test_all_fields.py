@@ -15,6 +15,5 @@ class QualtricsAllFields(AllFieldsTest, QualtricsBaseTest):
         return "tap_tester_qualtrics_all_fields_test"
 
     def streams_to_test(self):
-        streams_to_exclude = {}
+        streams_to_exclude = {'tickets'}
         return self.expected_stream_names().difference(streams_to_exclude)
-

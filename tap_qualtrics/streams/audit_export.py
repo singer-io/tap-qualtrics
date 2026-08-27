@@ -84,7 +84,10 @@ class AuditExport(IncrementalStream):
                 continue
 
             schema = infer_schema(records)
-            entries.append((f"audit_export__{event_name}", schema, cls.key_properties))
+            schema["properties"]["event_type"] = {"type": ["null", "string"]}
+            # Use id as primary key only when the event type actually emits it
+            key_props = ["id"] if "id" in schema.get("properties", {}) else []
+            entries.append((f"audit_export__{event_name}", schema, key_props))
             LOGGER.info("Discovered schema for audit_export__%s (%d sample records).", event_name, len(records))
 
         return entries, skipped
@@ -120,7 +123,9 @@ class AuditExport(IncrementalStream):
             for line in resp.content.splitlines():
                 line = line.strip()
                 if line:
-                    yield json.loads(line)
+                    record = json.loads(line)
+                    record["event_type"] = event_name
+                    yield record
             return
         except (json.JSONDecodeError, ValueError):
             pass
@@ -132,9 +137,13 @@ class AuditExport(IncrementalStream):
             for name in zf.namelist():
                 records.extend(json.loads(zf.read(name)))
         if isinstance(records, list):
+            for record in records:
+                record["event_type"] = event_name
             yield from records
         elif isinstance(records, dict):
-            yield from records.get("events", [records])
+            for record in records.get("events", [records]):
+                record["event_type"] = event_name
+                yield record
 
     def sync(self, state: Dict, transformer: Transformer, parent_id: Any = None) -> int:
         event_name = (parent_id or {}).get("name") if isinstance(parent_id, dict) else parent_id
