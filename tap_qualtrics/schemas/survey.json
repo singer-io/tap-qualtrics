@@ -32,18 +32,10 @@
                         "type": [
                             "array",
                             "null"
-                        ],
-                        "items": {}
+                        ]
                     }
                 }
             }
-        },
-        "embeddedData": {
-            "type": [
-                "array",
-                "null"
-            ],
-            "items": {}
         },
         "questions": {
             "type": [

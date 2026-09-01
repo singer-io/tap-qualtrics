@@ -66,6 +66,10 @@
                 "null",
                 "object"
             ]
+        },
+        "lastModifiedDate": {
+            "type": ["null", "string"],
+            "format": "date-time"
         }
     }
 }

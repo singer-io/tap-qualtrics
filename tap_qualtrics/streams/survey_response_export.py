@@ -139,15 +139,21 @@ class SurveyResponseExport(IncrementalStream):
 
         bookmark = get_bookmark(state, dynamic_id, self.replication_keys[0], self.client.start_date)
         max_bk = bookmark
+        count = 0
 
-        with metrics.record_counter(dynamic_id) as counter:
-            for record in self.get_records(parent_id, bookmark=bookmark):
-                transformed = transformer.transform(record, schema, mdata)
-                rec_bk = transformed.get(self.replication_keys[0], "")
-                if rec_bk >= bookmark:
-                    write_record(dynamic_id, transformed)
-                    counter.increment()
-                    max_bk = max(max_bk, rec_bk)
-
+        try:
+            with metrics.record_counter(dynamic_id) as counter:
+                for record in self.get_records(parent_id, bookmark=bookmark):
+                    transformed = transformer.transform(record, schema, mdata)
+                    rec_bk = transformed.get(self.replication_keys[0], "")
+                    if rec_bk >= bookmark:
+                        write_record(dynamic_id, transformed)
+                        counter.increment()
+                        max_bk = max(max_bk, rec_bk)
+                count = counter.value
+        except QualtricsError as exc:
+            LOGGER.warning("Skipping %s due to API error: %s", dynamic_id, exc)
+        finally:
             state = write_bookmark(state, dynamic_id, self.replication_keys[0], max_bk)
-            return counter.value
+
+        return count

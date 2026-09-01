@@ -21,3 +21,7 @@ class SmsDistributions(IncrementalStream):
         for record in self._paginate(self.path, params):
             record["survey_id"] = survey_id
             yield record
+
+    def _make_probe_path(self, parent_record):
+        survey_id = (parent_record or {}).get("id", "")
+        return f"{self.path}?surveyId={survey_id}" if survey_id else ""

@@ -1,10 +1,11 @@
-﻿from tap_qualtrics.streams.abstracts import MailingListChildStream
+﻿from tap_qualtrics.streams.abstracts import IncrementalMailingListChildStream
 
 
-class MailingListContacts(MailingListChildStream):
+class MailingListContacts(IncrementalMailingListChildStream):
     tap_stream_id = "mailing_list_contacts"
     key_properties = ["contactId"]
-    replication_method = "FULL_TABLE"
+    replication_method = "INCREMENTAL"
+    replication_keys = ["lastModifiedDate"]
     data_key = "result.elements"
     path = "directories/{directory_id}/mailinglists/{mailing_list_id}/contacts"
     page_size = 1000

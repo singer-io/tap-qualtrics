@@ -21,7 +21,7 @@ def _infer_json_type(value: Any) -> Dict:
     if isinstance(value, float):
         return {"type": ["null", "number"]}
     if isinstance(value, list):
-        items_schema = _infer_json_type(value[0]) if value else {}
+        items_schema = _infer_json_type(value[0]) if value else {"type": ["null", "string"]}
         return {"type": ["null", "array"], "items": items_schema}
     if isinstance(value, dict):
         props = {k: _infer_json_type(v) for k, v in value.items()}

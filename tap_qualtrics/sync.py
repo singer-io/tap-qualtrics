@@ -81,8 +81,11 @@ def sync(client: Client, config: Dict, catalog: singer.Catalog, state: Dict) -> 
             LOGGER.info("START Syncing: %s", stream_name)
             update_currently_syncing(state, stream_name)
 
-            total = stream.sync(state=state, transformer=transformer)
-            singer.write_state(state)
-
-            update_currently_syncing(state, None)
-            LOGGER.info("FINISHED Syncing: %s - %s records", stream_name, total)
+            try:
+                total = stream.sync(state=state, transformer=transformer)
+                singer.write_state(state)
+                update_currently_syncing(state, None)
+                LOGGER.info("FINISHED Syncing: %s - %s records", stream_name, total)
+            except Exception:
+                singer.write_state(state)
+                raise

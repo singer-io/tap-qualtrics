@@ -1,6 +1,13 @@
 {
     "type": "object",
     "properties": {
+        "modifiedDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
         "distributionId": {
             "type": [
                 "null",

@@ -74,6 +74,10 @@
                 "string"
             ],
             "format": "date-time"
+        },
+        "lastModifiedDate": {
+            "type": ["null", "string"],
+            "format": "date-time"
         }
     }
 }

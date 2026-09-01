@@ -65,6 +65,10 @@
                     }
                 }
             }
+        },
+        "lastModified": {
+            "type": ["null", "string"],
+            "format": "date-time"
         }
     }
 }
