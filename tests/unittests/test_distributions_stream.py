@@ -140,7 +140,8 @@ class TestDistributionHistory(unittest.TestCase):
 
     def test_no_distribution_id_yields_nothing(self):
         stream = self._stream()
-        records = list(stream.get_records(parent_id=None))
+        stream.url_endpoint = stream.get_url_endpoint(None)
+        records = list(stream.get_records())
         self.assertEqual(records, [])
 
     def test_with_distribution_id(self):
@@ -148,17 +149,19 @@ class TestDistributionHistory(unittest.TestCase):
         stream.client.get.return_value = {
             "result": {"elements": [{"contactId": "C1"}], "nextPage": None}
         }
-        records = list(stream.get_records(parent_id={"id": "D_1"}))
+        stream.url_endpoint = stream.get_url_endpoint({"id": "D_1"})
+        records = list(stream.get_records())
         self.assertEqual(len(records), 1)
-        self.assertEqual(records[0]["distributionId"], "D_1")
+        self.assertEqual(records[0]["contactId"], "C1")
 
     def test_with_string_parent_id(self):
         stream = self._stream()
         stream.client.get.return_value = {
             "result": {"elements": [{"contactId": "C1"}], "nextPage": None}
         }
-        records = list(stream.get_records(parent_id={"id": "D_1"}))
-        self.assertEqual(records[0]["distributionId"], "D_1")
+        stream.url_endpoint = stream.get_url_endpoint({"id": "D_1"})
+        records = list(stream.get_records())
+        self.assertEqual(records[0]["contactId"], "C1")
 
 
 if __name__ == "__main__":

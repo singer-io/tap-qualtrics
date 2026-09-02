@@ -249,16 +249,19 @@ class TestIncrementalStream(unittest.TestCase):
 
     @patch("tap_qualtrics.streams.abstracts.get_bookmark", return_value="2021-01-01")
     def test_get_bookmark(self, _):
-        self.assertEqual(self._stream().get_bookmark({}), "2021-01-01")
+        stream = self._stream()
+        self.assertEqual(stream.get_bookmark({}, stream.tap_stream_id), "2021-01-01")
 
     @patch("tap_qualtrics.streams.abstracts.get_bookmark", return_value="2020-01-01")
     def test_write_bookmark_advances(self, _):
-        state = self._stream().write_bookmark({}, "2021-06-01")
+        stream = self._stream()
+        state = stream.write_bookmark({}, stream.tap_stream_id, value="2021-06-01")
         self.assertEqual(state["bookmarks"]["incr_test"]["updated_at"], "2021-06-01")
 
     @patch("tap_qualtrics.streams.abstracts.get_bookmark", return_value="2021-06-01")
     def test_write_bookmark_does_not_go_back(self, _):
-        state = self._stream().write_bookmark({}, "2020-01-01")
+        stream = self._stream()
+        state = stream.write_bookmark({}, stream.tap_stream_id, value="2020-01-01")
         self.assertEqual(state["bookmarks"]["incr_test"]["updated_at"], "2021-06-01")
 
     def test_get_records_no_bookmark_no_start_date_param(self):

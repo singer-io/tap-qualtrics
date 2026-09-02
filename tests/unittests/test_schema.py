@@ -32,7 +32,7 @@ class TestInferJsonType(unittest.TestCase):
     def test_empty_list(self):
         result = _infer_json_type([])
         self.assertEqual(result["type"], ["null", "array"])
-        self.assertEqual(result["items"], {})
+        self.assertEqual(result["items"], {"type": ["null", "string"]})
 
     def test_list_of_ints(self):
         result = _infer_json_type([1, 2, 3])

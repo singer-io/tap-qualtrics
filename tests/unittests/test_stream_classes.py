@@ -56,7 +56,8 @@ class TestDistributionLinksGetRecords(unittest.TestCase):
 
     def test_no_distribution_id_empty(self):
         stream = self._stream()
-        records = list(stream.get_records(parent_id=None))
+        stream.url_endpoint = stream.get_url_endpoint(None)
+        records = list(stream.get_records())
         self.assertEqual(records, [])
 
     def test_with_distribution_id(self):
@@ -64,16 +65,18 @@ class TestDistributionLinksGetRecords(unittest.TestCase):
         stream.client.get.return_value = {
             "result": {"elements": [{"contactId": "C1", "link": "http://..."}], "nextPage": None}
         }
-        records = list(stream.get_records(parent_id={"id": "D_1"}))
+        stream.url_endpoint = stream.get_url_endpoint({"id": "D_1"})
+        records = list(stream.get_records())
         self.assertEqual(len(records), 1)
-        self.assertEqual(records[0]["distributionId"], "D_1")
+        self.assertEqual(records[0]["contactId"], "C1")
 
     def test_with_survey_id_adds_param(self):
         stream = self._stream()
         stream.client.get.return_value = {
             "result": {"elements": [], "nextPage": None}
         }
-        list(stream.get_records(parent_id={"id": "D_1", "_survey_id": "SV_1"}))
+        stream.url_endpoint = stream.get_url_endpoint({"id": "D_1", "survey_id": "SV_1"})
+        list(stream.get_records())
         _, kw = stream.client.get.call_args
         self.assertEqual(kw["params"].get("surveyId"), "SV_1")
 
@@ -155,20 +158,23 @@ class TestSurveyGetRecords(unittest.TestCase):
 
     def test_no_survey_id_empty(self):
         stream = self._stream()
-        records = list(stream.get_records(parent_id=None))
+        stream.url_endpoint = stream.get_url_endpoint(None)
+        records = list(stream.get_records())
         self.assertEqual(records, [])
 
     def test_with_survey_id(self):
         stream = self._stream()
         stream.client.get.return_value = {"result": {"SurveyID": "SV_1", "SurveyName": "Test"}}
-        records = list(stream.get_records(parent_id={"id": "SV_1"}))
+        stream.url_endpoint = stream.get_url_endpoint({"id": "SV_1"})
+        records = list(stream.get_records())
         self.assertEqual(len(records), 1)
-        self.assertEqual(records[0]["_survey_id"], "SV_1")
+        self.assertEqual(records[0]["SurveyID"], "SV_1")
 
     def test_empty_result_yields_nothing(self):
         stream = self._stream()
         stream.client.get.return_value = {"result": {}}
-        records = list(stream.get_records(parent_id={"id": "SV_1"}))
+        stream.url_endpoint = stream.get_url_endpoint({"id": "SV_1"})
+        records = list(stream.get_records())
         self.assertEqual(records, [])
 
 
