@@ -16,7 +16,8 @@ class Survey(ChildBaseStream):
         survey_id = (parent_obj or {}).get("id") if isinstance(parent_obj, dict) else parent_obj
         return self.path.format(survey_id=survey_id) if survey_id else ""
 
-    def get_records(self):
+    def get_records(self, parent_id=None, bookmark=""):
+        _ = (parent_id, bookmark)
         if not self.url_endpoint:
             return
         resp = self.client.get(self.url_endpoint)

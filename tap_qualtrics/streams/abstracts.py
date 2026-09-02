@@ -48,6 +48,7 @@ class BaseStream(ABC):
         self.client = client
         self.catalog_entry = catalog_entry
         self.catalog = None  # full singer.Catalog; set for dynamic-schema streams
+        self.url_endpoint = ""
         if catalog_entry:
             self.schema = catalog_entry.schema.to_dict()
             self.mdata = metadata.to_map(catalog_entry.metadata)
@@ -82,8 +83,11 @@ class BaseStream(ABC):
             raise err
 
     def check_access(self, parent_record: Optional[Dict] = None) -> bool:
-        """Return True if credentials can read this stream. Child streams require a
-        parent_record to probe; without one they are assumed accessible."""
+        """Return True if credentials can read this stream.
+
+        Child streams require a parent_record to probe; without one they are
+        assumed accessible.
+        """
         path = getattr(self, "path", None)
         if not path:
             return True
@@ -99,12 +103,19 @@ class BaseStream(ABC):
             LOGGER.warning("Access check failed for stream '%s': %s", self.tap_stream_id, exc)
             return False
 
-    def _make_probe_path(self, parent_record: Dict) -> str:  # pylint: disable=unused-argument
-        """Build the probe URL for a given parent record (top-level: no substitution needed)."""
+    def _make_probe_path(
+        self,
+        _parent_record: Dict,
+    ) -> str:
+        """Build probe URL for a parent record (top-level: no substitution needed)."""
         return getattr(self, "path", "")
 
-    def _enrich_sample(self, sample: Dict, parent_record: Dict) -> Dict:  # pylint: disable=unused-argument
-        """Inject parent context into a fetched sample so grandchild probes have the IDs they need."""
+    def _enrich_sample(
+        self,
+        sample: Dict,
+        _parent_record: Dict,
+    ) -> Dict:
+        """Inject parent context so grandchild probes have the IDs they need."""
         return sample
 
     # ------------------------------------------------------------------ #
@@ -141,7 +152,10 @@ class BaseStream(ABC):
 class FullTableStream(BaseStream):
     """Full-table stream: dumps all records on every sync."""
 
-    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:  # pylint: disable=unused-argument
+    def get_records(
+        self,
+        _parent_id: Any = None,
+    ) -> Iterator[Dict]:
         """Override in subclasses to customise how records are fetched."""
         yield from self._paginate(self.path)
 
@@ -171,20 +185,35 @@ class IncrementalStream(BaseStream):
             self.client.config["start_date"],
         )
 
-    def write_bookmark(self, state: dict, stream: str, key: Any = None, value: Any = None) -> Dict:
+    def write_bookmark(
+        self,
+        state: dict,
+        stream: str,
+        key: Any = None,
+        value: Any = None,
+    ) -> Dict:
         """A wrapper for singer.get_bookmark to deal with compatibility for
         bookmark values or start values."""
         if not (key or self.replication_keys):
             return state
 
-        current_bookmark = get_bookmark(state, stream, key or self.replication_keys[0], self.client.config["start_date"])
+        current_bookmark = get_bookmark(
+            state,
+            stream,
+            key or self.replication_keys[0],
+            self.client.config["start_date"],
+        )
         value = max(current_bookmark, value)
         return write_bookmark(
             state, stream, key or self.replication_keys[0], value
         )
 
 
-    def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[Dict]:
+    def get_records(
+        self,
+        _parent_id: Any = None,
+        bookmark: str = "",
+    ) -> Iterator[Dict]:
         params: Dict = {}
         if bookmark:
             params["startDate"] = bookmark
@@ -208,8 +237,7 @@ class IncrementalStream(BaseStream):
                         counter.increment()
                         if self.is_selected():
                             write_record(self.tap_stream_id, transformed)
-                        if record_bk > max_bk:
-                            max_bk = record_bk
+                        max_bk = max(max_bk, record_bk)
                         for child in self.child_to_sync:
                             child.sync(state=state, transformer=transformer, parent_id=record)
             finally:
@@ -323,7 +351,10 @@ class MailingListChildStream(FullTableStream):
 
 
 class IncrementalMailingListChildStream(IncrementalStream):
-    """Incremental stream fetched once per (directory, mailing-list) pair; uses parent's lastModifiedDate."""
+    """Incremental stream fetched once per (directory, mailing-list) pair.
+
+    Uses parent's lastModifiedDate.
+    """
 
     def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[Dict]:
         if not parent_id:
@@ -427,7 +458,10 @@ class SegmentChildStream(FullTableStream):
 
 
 class IncrementalSegmentChildStream(IncrementalStream):
-    """Incremental stream fetched once per (directory, segment) pair; uses parent's lastModifiedDate."""
+    """Incremental stream fetched once per (directory, segment) pair.
+
+    Uses parent's lastModifiedDate.
+    """
 
     def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[Dict]:
         if not parent_id:
@@ -476,14 +510,23 @@ class TicketChildStream(FullTableStream):
     """Stream whose records are fetched once per ticket."""
 
     def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
-        ticket_id = (parent_id or {}).get("key") or (parent_id or {}).get("ticketId") or (parent_id or {}).get("id") or parent_id
+        ticket_id = (
+            (parent_id or {}).get("key")
+            or (parent_id or {}).get("ticketId")
+            or (parent_id or {}).get("id")
+            or parent_id
+        )
         if not ticket_id:
             return
         path = self.path.format(ticket_id=ticket_id)
         yield from self._paginate(path)
 
     def _make_probe_path(self, parent_record: Dict) -> str:
-        ticket_id = (parent_record or {}).get("key") or (parent_record or {}).get("ticketId") or (parent_record or {}).get("id", "")
+        ticket_id = (
+            (parent_record or {}).get("key")
+            or (parent_record or {}).get("ticketId")
+            or (parent_record or {}).get("id", "")
+        )
         return self.path.format(ticket_id=ticket_id) if ticket_id else ""
 
 
@@ -492,22 +535,31 @@ class ChildBaseStream(IncrementalStream):
 
     bookmark_value = None
 
-    def get_url_endpoint(self, parent_obj=None) -> str:
+    def get_url_endpoint(self, _parent_obj=None) -> str:
         """Override in subclasses to build the child's URL from the parent record."""
         return ""
 
-    def modify_object(self, record: Dict, parent_record: Dict = None) -> Dict:
+    def modify_object(self, record: Dict, _parent_record: Dict = None) -> Dict:
         """Override to inject parent context (IDs, replication key) into each record."""
         return record
 
-    def get_records(self) -> Iterator[Any]:
+    def get_records(
+        self,
+        parent_id: Any = None,
+        bookmark: str = "",
+    ) -> Iterator[Any]:  # pylint: disable=unused-argument
         """Paginate self.url_endpoint, which sync() sets before calling this."""
+        _ = (parent_id, bookmark)
         if not self.url_endpoint:
             return
         try:
             yield from self._paginate(self.url_endpoint)
         except QualtricsInternalServerError:
-            LOGGER.warning("Skipping %s for %s: API returned 500", self.tap_stream_id, self.url_endpoint)
+            LOGGER.warning(
+                "Skipping %s for %s: API returned 500",
+                self.tap_stream_id,
+                self.url_endpoint,
+            )
 
     # pylint: disable=access-member-before-definition
     def get_bookmark(self, state: Dict, stream: str, key: Any = None) -> str:
@@ -525,7 +577,7 @@ class ChildBaseStream(IncrementalStream):
 
         with metrics.record_counter(self.tap_stream_id) as counter:
             try:
-                for record in self.get_records():
+                for record in self.get_records(parent_id=parent_id, bookmark=bookmark):
                     record = self.modify_object(record, parent_id)
                     transformed = transformer.transform(record, self.schema, self.mdata)
                     record_bk = transformed.get(self.replication_keys[0], "")
@@ -533,8 +585,7 @@ class ChildBaseStream(IncrementalStream):
                         counter.increment()
                         if self.is_selected():
                             write_record(self.tap_stream_id, transformed)
-                        if record_bk > max_bk:
-                            max_bk = record_bk
+                        max_bk = max(max_bk, record_bk)
                         for child in self.child_to_sync:
                             child.sync(state=state, transformer=transformer, parent_id=record)
             finally:

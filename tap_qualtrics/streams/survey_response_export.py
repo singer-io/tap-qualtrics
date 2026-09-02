@@ -2,7 +2,16 @@ import json
 from typing import Any, Dict, Iterator
 
 import backoff
-from singer import Transformer, get_bookmark, get_logger, metadata, metrics, write_bookmark, write_record, write_schema
+from singer import (
+    Transformer,
+    get_bookmark,
+    get_logger,
+    metadata,
+    metrics,
+    write_bookmark,
+    write_record,
+    write_schema,
+)
 
 from tap_qualtrics.exceptions import QualtricsBackoffError, QualtricsError
 from tap_qualtrics.streams.abstracts import IncrementalStream
@@ -19,7 +28,7 @@ class SurveyResponseExport(IncrementalStream):
     dynamic_schema = True
 
     @classmethod
-    def discover_dynamic_entries(cls, client):
+    def discover_dynamic_entries(cls, client):  # pylint: disable=too-many-locals
         """Return ((stream_name, schema, key_properties)[], skipped_ids[]) for each survey."""
         from tap_qualtrics.schema import infer_schema  # pylint: disable=import-outside-toplevel
         try:
@@ -29,7 +38,12 @@ class SurveyResponseExport(IncrementalStream):
             return [], []
         surveys = (surveys_resp.get("result") or {}).get("elements", [])
 
-        @backoff.on_exception(backoff.expo, QualtricsBackoffError, max_tries=5, jitter=backoff.full_jitter)
+        @backoff.on_exception(
+            backoff.expo,
+            QualtricsBackoffError,
+            max_tries=5,
+            jitter=backoff.full_jitter,
+        )
         def _fetch_records(survey_id):
             """Run one full export cycle; QualtricsBackoffError triggers exponential retry."""
             body = {
@@ -64,7 +78,10 @@ class SurveyResponseExport(IncrementalStream):
             try:
                 records = _fetch_records(survey_id)
             except QualtricsBackoffError:
-                LOGGER.warning("Skipping survey '%s' from catalog: still rate limited after retries.", survey_id)
+                LOGGER.warning(
+                    "Skipping survey '%s' from catalog: still rate limited after retries.",
+                    survey_id,
+                )
                 skipped.append(survey_id)
                 continue
             except Exception as exc:  # pylint: disable=broad-exception-caught
@@ -73,7 +90,13 @@ class SurveyResponseExport(IncrementalStream):
                 continue
 
             if not records:
-                LOGGER.info("Skipping survey '%s' from catalog: no data available in the discovery window.", survey_id)
+                LOGGER.info(
+                    (
+                        "Skipping survey '%s' from catalog: no data available "
+                        "in the discovery window."
+                    ),
+                    survey_id,
+                )
                 skipped.append(survey_id)
                 continue
 
@@ -83,12 +106,20 @@ class SurveyResponseExport(IncrementalStream):
 
             schema = infer_schema(records)
             entries.append((f"survey_response_export__{survey_id}", schema, cls.key_properties))
-            LOGGER.info("Discovered schema for survey_response_export__%s (%d sample records).", survey_id, len(records))
+            LOGGER.info(
+                "Discovered schema for survey_response_export__%s (%d sample records).",
+                survey_id,
+                len(records),
+            )
 
         return entries, skipped
 
 
-    def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[Dict]:
+    def get_records(
+        self,
+        parent_id: Any = None,
+        bookmark: str = "",
+    ) -> Iterator[Dict]:
         survey_id = (parent_id or {}).get("id") or parent_id
         if not survey_id:
             return

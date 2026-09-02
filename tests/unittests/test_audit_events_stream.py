@@ -94,6 +94,16 @@ class TestAuditEventsGetRecords(unittest.TestCase):
         records = list(stream.get_records(parent_id="login"))
         self.assertEqual(records, [])
 
+    def test_make_probe_path_includes_activity_type(self):
+        stream = self._stream()
+        probe = stream._make_probe_path({"name": "logins"})
+        self.assertEqual(probe, "logs?activityType=logins")
+
+    def test_make_probe_path_url_encodes_activity_type(self):
+        stream = self._stream()
+        probe = stream._make_probe_path({"name": "user logins"})
+        self.assertEqual(probe, "logs?activityType=user%20logins")
+
 
 class TestAuditEventsSync(unittest.TestCase):
 

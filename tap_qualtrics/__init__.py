@@ -7,7 +7,14 @@ from tap_qualtrics.sync import sync
 
 LOGGER = singer.get_logger()
 
-REQUIRED_CONFIG_KEYS = ['clientId', 'clientSecret', 'scope', 'grant_type', 'dataCenter', 'start_date']
+REQUIRED_CONFIG_KEYS = [
+    "clientId",
+    "clientSecret",
+    "scope",
+    "grant_type",
+    "dataCenter",
+    "start_date",
+]
 
 def do_discover(client):
     """
@@ -37,7 +44,8 @@ def main():
                 client=client,
                 config=parsed_args.config,
                 catalog=parsed_args.catalog,
-                state=state)
+                state=state,
+            )
 
 
 if __name__ == "__main__":

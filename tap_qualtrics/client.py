@@ -5,7 +5,11 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 
 import backoff
 import requests
-from requests.exceptions import ChunkedEncodingError, ConnectionError as RequestsConnectionError, Timeout
+from requests.exceptions import (
+    ChunkedEncodingError,
+    ConnectionError as RequestsConnectionError,
+    Timeout,
+)
 from singer import get_logger, metrics
 
 from tap_qualtrics.exceptions import (ERROR_CODE_EXCEPTION_MAPPING,
@@ -26,7 +30,10 @@ def raise_for_error(response: requests.Response) -> None:
         response_json = {}
     if response.status_code not in [200, 201, 204]:
         if response_json.get("error"):
-            message = f"HTTP-error-code: {response.status_code}, Error: {response_json.get('error')}"
+            message = (
+                f"HTTP-error-code: {response.status_code}, "
+                f"Error: {response_json.get('error')}"
+            )
         else:
             error_message = ERROR_CODE_EXCEPTION_MAPPING.get(
                 response.status_code, {}
@@ -41,7 +48,7 @@ def raise_for_error(response: requests.Response) -> None:
         raise exc(message, response) from None
 
 
-class Client:
+class Client:  # pylint: disable=too-many-instance-attributes
     """HTTP client for the Qualtrics API (OAuth2 client credentials auth)."""
 
     def __init__(self, config: Mapping[str, Any]) -> None:
@@ -50,7 +57,11 @@ class Client:
         self._session = requests.Session()
         self.base_url = f"https://{self.data_center}.qualtrics.com/API/v3"
         config_request_timeout = config.get("request_timeout")
-        self.request_timeout = float(config_request_timeout) if config_request_timeout else REQUEST_TIMEOUT
+        self.request_timeout = (
+            float(config_request_timeout)
+            if config_request_timeout
+            else REQUEST_TIMEOUT
+        )
         self.start_date = config.get("start_date")
         self.page_size = int(config.get("page_size", 100))
         self.access_token = None
@@ -79,7 +90,9 @@ class Client:
         client_secret = self.config.get("clientSecret")
 
         if not client_id or not client_secret:
-            raise QualtricsError("Missing required OAuth2 credentials: clientId and clientSecret")
+            raise QualtricsError(
+                "Missing required OAuth2 credentials: clientId and clientSecret"
+            )
 
         # Check if the token is still valid
         if self.access_token and datetime.now(timezone.utc) < self.__expires:
@@ -100,9 +113,16 @@ class Client:
         }
 
         try:
-            response = self._session.post(self.oauth_token_endpoint, headers=headers, data=data, timeout=self.request_timeout)
+            response = self._session.post(
+                self.oauth_token_endpoint,
+                headers=headers,
+                data=data,
+                timeout=self.request_timeout,
+            )
             if response.status_code != 200:
-                raise QualtricsError(f"Failed to obtain OAuth2 token: HTTP {response.status_code}")
+                raise QualtricsError(
+                    f"Failed to obtain OAuth2 token: HTTP {response.status_code}"
+                )
             token_response = response.json()
             self.access_token = token_response.get("access_token")
             if not self.access_token:
@@ -122,7 +142,7 @@ class Client:
         headers["Authorization"] = f"Bearer {self.access_token}"
         return headers, params
 
-    def make_request(
+    def make_request(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         method: str,
         endpoint: str,
@@ -130,7 +150,7 @@ class Client:
         headers: Optional[Dict[str, Any]] = None,
         body: Optional[Dict[str, Any]] = None,
         json: Optional[Dict[str, Any]] = None,
-        path: Optional[str] = None
+        path: Optional[str] = None,
     ) -> Any:
         """
         Sends an HTTP request to the specified API endpoint.
@@ -145,7 +165,8 @@ class Client:
         headers, params = self.authenticate(headers, params)
         try:
             return self._make_request(
-                method, endpoint,
+                method,
+                endpoint,
                 headers=headers,
                 params=params,
                 data=body,
@@ -158,7 +179,8 @@ class Client:
             self._obtain_oauth_token()
             headers["Authorization"] = f"Bearer {self.access_token}"
             return self._make_request(
-                method, endpoint,
+                method,
+                endpoint,
                 headers=headers,
                 params=params,
                 data=body,
@@ -191,17 +213,31 @@ class Client:
         raise_for_error(response)
         return response
 
-    def get(self, path: str, params: Optional[Dict] = None, full_url: Optional[str] = None) -> Any:
+    def get(
+        self,
+        path: str,
+        params: Optional[Dict] = None,
+        full_url: Optional[str] = None,
+    ) -> Any:
         """GET request. Uses full_url when provided (for next-page URLs)."""
         url = full_url or f"{self.base_url}/{path}"
         return self.make_request("GET", url, params=params).json()
 
-    def post(self, path: str, payload: Optional[Dict] = None, full_url: Optional[str] = None) -> Any:
+    def post(
+        self,
+        path: str,
+        payload: Optional[Dict] = None,
+        full_url: Optional[str] = None,
+    ) -> Any:
         """POST request with JSON body."""
         url = full_url or f"{self.base_url}/{path}"
         return self.make_request("POST", url, json=payload).json()
 
-    def get_file(self, path: str, full_url: Optional[str] = None) -> requests.Response:
+    def get_file(
+        self,
+        path: str,
+        full_url: Optional[str] = None,
+    ) -> requests.Response:
         """GET request returning the raw response (for file downloads)."""
         url = full_url or f"{self.base_url}/{path}"
         headers = dict(self._get_headers())

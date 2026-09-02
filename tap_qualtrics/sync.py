@@ -1,8 +1,9 @@
-﻿import singer
-from typing import Dict
+﻿from typing import Dict
+
+import singer
 from singer import metadata
-from tap_qualtrics.streams import STREAMS
 from tap_qualtrics.client import Client
+from tap_qualtrics.streams import STREAMS
 
 LOGGER = singer.get_logger()
 
@@ -28,7 +29,12 @@ def _has_selected_dynamic_entries(child_name: str, catalog: singer.Catalog) -> b
     )
 
 
-def write_schema(stream, client: Client, streams_to_sync: list, catalog: singer.Catalog) -> None:
+def write_schema(
+    stream,
+    client: Client,
+    streams_to_sync: list,
+    catalog: singer.Catalog,
+) -> None:
     if stream.is_selected():
         stream.write_schema()
 
@@ -36,19 +42,31 @@ def write_schema(stream, client: Client, streams_to_sync: list, catalog: singer.
         child_entry = catalog.get_stream(child_name)
         if child_entry is None:
             # For dynamic-schema streams the catalog has <child>__<key> entries, not <child>.
-            if child_name in _DYNAMIC_SCHEMA_BASES and _has_selected_dynamic_entries(child_name, catalog):
+            if (
+                child_name in _DYNAMIC_SCHEMA_BASES
+                and _has_selected_dynamic_entries(child_name, catalog)
+            ):
                 child_obj = STREAMS[child_name](client=client, catalog_entry=None)
                 child_obj.catalog = catalog
                 stream.child_to_sync.append(child_obj)
             continue
-        child_obj = STREAMS[child_name](client=client, catalog_entry=child_entry)
+        child_obj = STREAMS[child_name](
+            client=client,
+            catalog_entry=child_entry,
+        )
         child_obj.catalog = catalog
         write_schema(child_obj, client, streams_to_sync, catalog)
         if child_name in streams_to_sync:
             stream.child_to_sync.append(child_obj)
 
 
-def sync(client: Client, config: Dict, catalog: singer.Catalog, state: Dict) -> None:  # pylint: disable=unused-argument
+def sync(
+    client: Client,
+    config: Dict,
+    catalog: singer.Catalog,
+    state: Dict,
+) -> None:  # pylint: disable=unused-argument
+    _ = config
     streams_to_sync = [s.stream for s in catalog.get_selected_streams(state)]
     LOGGER.info("Selected streams: %s", streams_to_sync)
 
@@ -65,10 +83,16 @@ def sync(client: Client, config: Dict, catalog: singer.Catalog, state: Dict) -> 
                     if parent_name and parent_name not in streams_to_sync:
                         streams_to_sync.append(parent_name)
                 else:
-                    LOGGER.warning("Stream %s not in STREAMS registry – skipping", stream_name)
+                    LOGGER.warning(
+                        "Stream %s not in STREAMS registry - skipping",
+                        stream_name,
+                    )
                 continue
 
-            stream = STREAMS[stream_name](client=client, catalog_entry=catalog.get_stream(stream_name))
+            stream = STREAMS[stream_name](
+                client=client,
+                catalog_entry=catalog.get_stream(stream_name),
+            )
 
             if stream.parent:
                 # Auto-add parent so it drives this child; child is synced via parent

@@ -21,7 +21,10 @@ def _prune_inaccessible_children(schemas: dict, field_metadata: dict) -> None:
         for name, stream_cls in list(STREAMS.items()):
             if name in schemas and stream_cls.parent and stream_cls.parent not in schemas:
                 LOGGER.warning(
-                    "Stream '%s' excluded from catalog because parent stream '%s' is not accessible.",
+                    (
+                        "Stream '%s' excluded from catalog because parent "
+                        "stream '%s' is not accessible."
+                    ),
                     name,
                     stream_cls.parent,
                 )
@@ -82,7 +85,9 @@ def _apply_access_checks(client, schemas: dict, field_metadata: dict) -> None:
 
         # Fetch a sample record so this stream's children can be probed
         if parent_record is not None:
-            probe_path = instance._make_probe_path(parent_record)  # pylint: disable=protected-access
+            probe_path = instance._make_probe_path(  # pylint: disable=protected-access
+                parent_record
+            )
         elif not stream_cls.parent:
             probe_path = getattr(instance, "path", None)
         else:
@@ -91,7 +96,10 @@ def _apply_access_checks(client, schemas: dict, field_metadata: dict) -> None:
         if probe_path:
             sample = _fetch_sample_record(client, probe_path)
             if sample:
-                parent_samples[name] = instance._enrich_sample(sample, parent_record or {})  # pylint: disable=protected-access
+                parent_samples[name] = instance._enrich_sample(  # pylint: disable=protected-access
+                    sample,
+                    parent_record or {},
+                )
 
     for name in inaccessible:
         schemas.pop(name, None)
@@ -101,7 +109,10 @@ def _apply_access_checks(client, schemas: dict, field_metadata: dict) -> None:
 
     if not schemas:
         raise QualtricsForbiddenError(
-            "HTTP-error-code: 403, Error: The credentials do not have 'read' access to any supported streams."
+            (
+                "HTTP-error-code: 403, Error: The credentials do not have "
+                "'read' access to any supported streams."
+            )
         )
     if inaccessible:
         LOGGER.warning(
@@ -120,7 +131,9 @@ def discover(client=None) -> Catalog:
 
     skipped_no_access = []
     if client is not None:
-        skipped_no_access = list(_apply_access_checks(client, schemas, field_metadata) or [])
+        skipped_no_access = list(
+            _apply_access_checks(client, schemas, field_metadata) or []
+        )
 
     catalog = Catalog([])
 
@@ -171,7 +184,11 @@ def _add_dynamic_entries(client, catalog: Catalog) -> list:
             entries, skipped = stream_cls.discover_dynamic_entries(client)
             all_skipped.extend(skipped)
         except QualtricsError as exc:
-            LOGGER.warning("Skipping dynamic entries for '%s' during discovery: %s", stream_cls.tap_stream_id, exc)
+            LOGGER.warning(
+                "Skipping dynamic entries for '%s' during discovery: %s",
+                stream_cls.tap_stream_id,
+                exc,
+            )
             continue
         replication_method = getattr(stream_cls, "replication_method", "FULL_TABLE")
         replication_keys = getattr(stream_cls, "replication_keys", None) or []
@@ -189,7 +206,12 @@ def _add_dynamic_entries(client, catalog: Catalog) -> list:
                 mdata = metadata.write(mdata, (), "parent-tap-stream-id", parent_stream)
             for field_name in replication_keys:
                 if field_name in schema_dict.get("properties", {}):
-                    mdata = metadata.write(mdata, ("properties", field_name), "inclusion", "automatic")
+                    mdata = metadata.write(
+                        mdata,
+                        ("properties", field_name),
+                        "inclusion",
+                        "automatic",
+                    )
             mdata = metadata.write(mdata, (), "selected", False)
             catalog.streams.append(
                 CatalogEntry(

@@ -1,4 +1,6 @@
-﻿from tap_qualtrics.streams.directories_contacts import DirectoryContacts
+﻿# pylint: disable=cyclic-import
+
+from tap_qualtrics.streams.directories_contacts import DirectoryContacts
 from tap_qualtrics.streams.users import Users
 from tap_qualtrics.streams.user import User
 from tap_qualtrics.streams.groups import Groups

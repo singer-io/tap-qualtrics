@@ -8,4 +8,9 @@ class Libraries(FullTableStream):
     data_key = "result.elements"
     path = "libraries"
     page_size = 100
-    children = ["library_messages", "libraries_survey_questions", "library_surveys", "library_blocks"]
+    children = [
+        "library_messages",
+        "libraries_survey_questions",
+        "library_surveys",
+        "library_blocks",
+    ]

@@ -1,4 +1,5 @@
 ﻿from typing import Any, Dict
+from urllib.parse import quote
 
 from singer import Transformer, get_logger, metrics, write_record
 
@@ -16,12 +17,17 @@ class AuditEvents(FullTableStream):
     page_size = 1000
     parent = "audit_events_types"
 
+    def _make_probe_path(self, parent_record: Dict) -> str:
+        activity_type = (parent_record or {}).get("name", "")
+        if not activity_type:
+            return ""
+        return f"{self.path}?activityType={quote(str(activity_type))}"
+
     def get_records(self, parent_id=None):
         activity_type = (parent_id or {}).get("name") if isinstance(parent_id, dict) else parent_id
         if not activity_type:
             return
         params = {"pageSize": self.page_size, "activityType": activity_type}
-        # /logs uses a cursor token in result.nextPage, not a full URL
         while True:
             response = self.client.get(self.path, params=params)
             result = response.get("result") or {}
@@ -31,7 +37,11 @@ class AuditEvents(FullTableStream):
             next_token = result.get("nextPage")
             if not next_token:
                 break
-            params = {"pageSize": self.page_size, "activityType": activity_type, "pageToken": next_token}
+            params = {
+                "pageSize": self.page_size,
+                "activityType": activity_type,
+                "pageToken": next_token,
+            }
 
     def sync(self, state: Dict, transformer: Transformer, parent_id: Any = None) -> int:
         with metrics.record_counter(self.tap_stream_id) as counter:

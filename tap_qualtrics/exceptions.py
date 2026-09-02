@@ -51,7 +51,10 @@ ERROR_CODE_EXCEPTION_MAPPING = {
     },
     401: {
         "raise_exception": QualtricsUnauthorizedError,
-        "message": "The access token provided is expired, revoked, malformed or invalid for other reasons."
+        "message": (
+            "The access token provided is expired, revoked, malformed "
+            "or invalid for other reasons."
+        )
     },
     403: {
         "raise_exception": QualtricsForbiddenError,
@@ -63,7 +66,10 @@ ERROR_CODE_EXCEPTION_MAPPING = {
     },
     409: {
         "raise_exception": QualtricsConflictError,
-        "message": "The API request cannot be completed because the requested operation would conflict with an existing item."
+        "message": (
+            "The API request cannot be completed because the requested "
+            "operation would conflict with an existing item."
+        )
     },
     422: {
         "raise_exception": QualtricsUnprocessableEntityError,

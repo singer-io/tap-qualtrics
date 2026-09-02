@@ -27,7 +27,11 @@ class LibrariesSurveyQuestions(LibraryChildStream):
                 "questions": [
                     {
                         "question_id": question_id,
-                        "question_value": question_value if isinstance(question_value, str) else None,
+                        "question_value": (
+                            question_value
+                            if isinstance(question_value, str)
+                            else None
+                        ),
                     }
                     for question_id, question_value in questions.items()
                 ],

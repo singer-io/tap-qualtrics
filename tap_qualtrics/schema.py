@@ -1,10 +1,10 @@
 ﻿import os
 import json
 import re
-import singer
 from typing import Any, Dict, Tuple
+
+import singer
 from singer import metadata
-from tap_qualtrics.streams import STREAMS
 
 LOGGER = singer.get_logger()
 
@@ -12,23 +12,24 @@ _DATETIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
 
 
 def _infer_json_type(value: Any) -> Dict:
+    result = {"type": ["null", "string"]}
     if value is None:
-        return {"type": ["null", "string"]}
-    if isinstance(value, bool):
-        return {"type": ["null", "boolean"]}
-    if isinstance(value, int):
-        return {"type": ["null", "integer"]}
-    if isinstance(value, float):
-        return {"type": ["null", "number"]}
-    if isinstance(value, list):
-        items_schema = _infer_json_type(value[0]) if value else {"type": ["null", "string"]}
-        return {"type": ["null", "array"], "items": items_schema}
+        return result
     if isinstance(value, dict):
         props = {k: _infer_json_type(v) for k, v in value.items()}
-        return {"type": ["null", "object"], "properties": props}
-    if isinstance(value, str) and _DATETIME_RE.match(value):
-        return {"type": ["null", "string"], "format": "date-time"}
-    return {"type": ["null", "string"]}
+        result = {"type": ["null", "object"], "properties": props}
+    elif isinstance(value, list):
+        items_schema = _infer_json_type(value[0]) if value else result
+        result = {"type": ["null", "array"], "items": items_schema}
+    elif isinstance(value, bool):
+        result = {"type": ["null", "boolean"]}
+    elif isinstance(value, int):
+        result = {"type": ["null", "integer"]}
+    elif isinstance(value, float):
+        result = {"type": ["null", "number"]}
+    elif isinstance(value, str) and _DATETIME_RE.match(value):
+        result = {"type": ["null", "string"], "format": "date-time"}
+    return result
 
 
 def infer_schema(records: list) -> Dict:
@@ -64,7 +65,10 @@ def load_schema_references() -> Dict:
 
     refs = {}
     for shared_schema_file in shared_file_names:
-        with open(os.path.join(shared_schema_path, shared_schema_file), encoding='utf-8') as data_file:
+        with open(
+            os.path.join(shared_schema_path, shared_schema_file),
+            encoding="utf-8",
+        ) as data_file:
             refs["shared/" + shared_schema_file] = json.load(data_file)
 
     return refs
@@ -72,17 +76,19 @@ def load_schema_references() -> Dict:
 
 def get_schemas() -> Tuple[Dict, Dict]:
     """
-    Load the schema references, prepare metadata for each streams and return schema and metadata for the catalog.
+    Load schema references and build stream schemas with Singer metadata.
     """
     schemas = {}
     field_metadata = {}
+    # Local import avoids a module import cycle between schema and streams.
+    from tap_qualtrics.streams import STREAMS  # pylint: disable=import-outside-toplevel
 
     refs = load_schema_references()
     for stream_name, stream_obj in STREAMS.items():
         if getattr(stream_obj, "dynamic_schema", False):
             continue  # catalog entries built at runtime via discover_dynamic_entries()
-        schema_path = get_abs_path("schemas/{}.json".format(stream_name))
-        with open(schema_path, encoding='utf-8') as file:
+        schema_path = get_abs_path(f"schemas/{stream_name}.json")
+        with open(schema_path, encoding="utf-8") as file:
             schema = json.load(file)
 
         schemas[stream_name] = schema

@@ -5,10 +5,22 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterator
 
 import backoff
+from singer import (
+    Transformer,
+    get_bookmark,
+    get_logger,
+    metadata,
+    metrics,
+    write_bookmark,
+    write_record,
+    write_schema,
+)
 
-from singer import Transformer, get_bookmark, get_logger, metadata, metrics, write_bookmark, write_record, write_schema
-
-from tap_qualtrics.exceptions import QualtricsBadRequestError, QualtricsBackoffError, QualtricsError
+from tap_qualtrics.exceptions import (
+    QualtricsBackoffError,
+    QualtricsBadRequestError,
+    QualtricsError,
+)
 from tap_qualtrics.streams.abstracts import IncrementalStream
 
 LOGGER = get_logger()
@@ -24,7 +36,7 @@ class AuditExport(IncrementalStream):
     dynamic_schema = True
 
     @classmethod
-    def discover_dynamic_entries(cls, client):
+    def discover_dynamic_entries(cls, client):  # pylint: disable=too-many-locals
         """Return ((stream_name, schema, key_properties)[], skipped_names[]) for each event type."""
         from tap_qualtrics.schema import infer_schema  # pylint: disable=import-outside-toplevel
 
@@ -38,10 +50,19 @@ class AuditExport(IncrementalStream):
         discovery_start = client.start_date
         discovery_end = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        @backoff.on_exception(backoff.expo, QualtricsBackoffError, max_tries=5, jitter=backoff.full_jitter)
+        @backoff.on_exception(
+            backoff.expo,
+            QualtricsBackoffError,
+            max_tries=5,
+            jitter=backoff.full_jitter,
+        )
         def _fetch_records(event_name):
             """Fetch all records in a single request; retries on rate limit."""
-            body = {"eventName": event_name, "startDate": discovery_start, "endDate": discovery_end}
+            body = {
+                "eventName": event_name,
+                "startDate": discovery_start,
+                "endDate": discovery_end,
+            }
             start = client.post("audit-exports", body)
             export_id = (start.get("result") or {}).get("id", "")
             if not export_id:
@@ -70,16 +91,25 @@ class AuditExport(IncrementalStream):
             try:
                 records = _fetch_records(event_name)
             except QualtricsBadRequestError:
-                LOGGER.warning("Skipping '%s' from catalog: event type not supported by the API.", event_name)
+                LOGGER.warning(
+                    "Skipping '%s' from catalog: event type not supported by the API.",
+                    event_name,
+                )
                 skipped.append(event_name)
                 continue
             except QualtricsBackoffError:
-                LOGGER.warning("Skipping '%s' from catalog: still rate limited after retries.", event_name)
+                LOGGER.warning(
+                    "Skipping '%s' from catalog: still rate limited after retries.",
+                    event_name,
+                )
                 skipped.append(event_name)
                 continue
 
             if not records:
-                LOGGER.info("Skipping '%s' from catalog: no data found in discovery window.", event_name)
+                LOGGER.info(
+                    "Skipping '%s' from catalog: no data found in discovery window.",
+                    event_name,
+                )
                 skipped.append(event_name)
                 continue
 
@@ -88,12 +118,20 @@ class AuditExport(IncrementalStream):
             # Use id as primary key only when the event type actually emits it
             key_props = ["id"] if "id" in schema.get("properties", {}) else []
             entries.append((f"audit_export__{event_name}", schema, key_props))
-            LOGGER.info("Discovered schema for audit_export__%s (%d sample records).", event_name, len(records))
+            LOGGER.info(
+                "Discovered schema for audit_export__%s (%d sample records).",
+                event_name,
+                len(records),
+            )
 
         return entries, skipped
 
-
-    def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[Dict]:
+    # pylint: disable=too-many-branches
+    def get_records(
+        self,
+        parent_id: Any = None,
+        bookmark: str = "",
+    ) -> Iterator[Dict]:
         event_name = (parent_id or {}).get("name") if isinstance(parent_id, dict) else parent_id
         if not event_name:
             return
@@ -132,10 +170,10 @@ class AuditExport(IncrementalStream):
         try:
             records = resp.json()
         except Exception:  # pylint: disable=broad-exception-caught
-            zf = zipfile.ZipFile(io.BytesIO(resp.content))
             records = []
-            for name in zf.namelist():
-                records.extend(json.loads(zf.read(name)))
+            with zipfile.ZipFile(io.BytesIO(resp.content)) as zip_file:
+                for name in zip_file.namelist():
+                    records.extend(json.loads(zip_file.read(name)))
         if isinstance(records, list):
             for record in records:
                 record["event_type"] = event_name
@@ -145,7 +183,12 @@ class AuditExport(IncrementalStream):
                 record["event_type"] = event_name
                 yield record
 
-    def sync(self, state: Dict, transformer: Transformer, parent_id: Any = None) -> int:
+    def sync(  # pylint: disable=too-many-branches
+        self,
+        state: Dict,
+        transformer: Transformer,
+        parent_id: Any = None,
+    ) -> int:
         event_name = (parent_id or {}).get("name") if isinstance(parent_id, dict) else parent_id
         if not event_name:
             return 0
@@ -165,7 +208,12 @@ class AuditExport(IncrementalStream):
         mdata = metadata.to_map(catalog_entry.metadata)
         write_schema(dynamic_id, schema, self.key_properties)
 
-        bookmark = get_bookmark(state, dynamic_id, self.replication_keys[0], self.client.start_date)
+        bookmark = get_bookmark(
+            state,
+            dynamic_id,
+            self.replication_keys[0],
+            self.client.start_date,
+        )
         max_bk = bookmark
         with metrics.record_counter(dynamic_id) as counter:
             for record in self.get_records(parent_id=parent_id, bookmark=bookmark):
@@ -174,7 +222,6 @@ class AuditExport(IncrementalStream):
                 if record_bk >= bookmark:
                     write_record(dynamic_id, transformed)
                     counter.increment()
-                    if record_bk > max_bk:
-                        max_bk = record_bk
+                    max_bk = max(max_bk, record_bk)
             state = write_bookmark(state, dynamic_id, self.replication_keys[0], max_bk)
             return counter.value

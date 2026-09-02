@@ -20,7 +20,8 @@ class Segments(ChildBaseStream):
         if isinstance(record, dict) and isinstance(parent_record, dict):
             directory_id = parent_record.get("directoryId", "")
             record["directoryId"] = directory_id
-            record["_directory_id"] = directory_id  # grandchild segment_contacts needs _directory_id
+            # grandchild segment_contacts reads this context key
+            record["_directory_id"] = directory_id
         return record
 
     def _make_probe_path(self, parent_record):
