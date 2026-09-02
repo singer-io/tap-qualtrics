@@ -3,10 +3,10 @@ import unittest
 from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock, patch
 
-from tap_qualtrics.client import Client, raise_for_error
+from tap_qualtrics.client import Client, raise_for_error, wait_if_retry_after
 from tap_qualtrics.exceptions import (
-    QualtricsBackoffError,
     QualtricsError,
+    QualtricsRateLimitError,
     QualtricsUnauthorizedError,
 )
 
@@ -220,15 +220,36 @@ class TestMakeRequest429(unittest.TestCase):
 
     @patch.object(Client, "_obtain_oauth_token")
     @patch("time.sleep")
-    def test_429_raises_backoff_error(self, mock_sleep, mock_oauth):
+    def test_429_raises_rate_limit_error(self, mock_sleep, mock_oauth):
         mock_oauth.return_value = None
         c = Client(_OAUTH_CONFIG)
         c.access_token = "tok"
         resp = MagicMock()
         resp.status_code = 429
+        resp.headers = {"Retry-After": "0"}
+        resp.json.return_value = {}
         with patch.object(c._session, "request", return_value=resp):
-            with self.assertRaises(Exception):
+            with self.assertRaises(QualtricsRateLimitError):
                 c._make_request("GET", "https://iad1.qualtrics.com/API/v3/users")
+
+
+class TestWaitIfRetryAfter(unittest.TestCase):
+
+    def test_uses_retry_after_header(self):
+        response = MagicMock()
+        response.headers = {"Retry-After": "12"}
+        exc = QualtricsRateLimitError("rate limit", response=response)
+        self.assertEqual(wait_if_retry_after({"exception": exc}), 12.0)
+
+    def test_invalid_retry_after_falls_back(self):
+        response = MagicMock()
+        response.headers = {"Retry-After": "abc"}
+        exc = QualtricsRateLimitError("rate limit", response=response)
+        self.assertEqual(wait_if_retry_after({"exception": exc}), 5.0)
+
+    def test_missing_response_falls_back(self):
+        exc = QualtricsRateLimitError("rate limit")
+        self.assertEqual(wait_if_retry_after({"exception": exc}), 5.0)
 
 
 # ---------------------------------------------------------------------------

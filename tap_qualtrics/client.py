@@ -13,13 +13,36 @@ from requests.exceptions import (
 from singer import get_logger, metrics
 
 from tap_qualtrics.exceptions import (ERROR_CODE_EXCEPTION_MAPPING,
-                                      QualtricsBackoffError, QualtricsError,
+                                      QualtricsBadGatewayError, QualtricsError,
+                                      QualtricsInternalServerError,
+                                      QualtricsRateLimitError,
+                                      QualtricsServiceUnavailableError,
                                       QualtricsUnauthorizedError)
 
 LOGGER = get_logger()
 REQUEST_TIMEOUT = 300
 MAX_POLL_ATTEMPTS = 60
 POLL_INTERVAL = 5  # seconds between status checks
+
+
+def wait_if_retry_after(details_or_exception) -> float:
+    """Return retry wait seconds from Retry-After header when available."""
+    if isinstance(details_or_exception, dict):
+        exception = details_or_exception.get("exception")
+    else:
+        exception = details_or_exception
+    response = getattr(exception, "response", None)
+
+    if response is not None and getattr(response, "headers", None):
+        retry_after = response.headers.get("Retry-After")
+        if retry_after:
+            try:
+                return float(retry_after)
+            except (TypeError, ValueError):
+                pass
+
+    # Fallback when header is absent or invalid.
+    return 5.0
 
 
 def raise_for_error(response: requests.Response) -> None:
@@ -195,10 +218,19 @@ class Client:  # pylint: disable=too-many-instance-attributes
             RequestsConnectionError,
             ChunkedEncodingError,
             Timeout,
-            QualtricsBackoffError,
+            QualtricsInternalServerError,
+            QualtricsServiceUnavailableError,
+            QualtricsBadGatewayError,
         ),
-        max_tries=3,
+        max_tries=5,
         factor=2,
+    )
+    @backoff.on_exception(
+        backoff.runtime,
+        exception=(QualtricsRateLimitError,),
+        max_tries=5,
+        value=wait_if_retry_after,
+        jitter=None,
     )
     def _make_request(
         self, method: str, url: str, **kwargs
@@ -208,8 +240,6 @@ class Client:  # pylint: disable=too-many-instance-attributes
         kwargs.setdefault("timeout", self.request_timeout)
         with metrics.http_request_timer(url):
             response = self._session.request(method.upper(), url, **kwargs)
-        if response.status_code == 429:
-            raise QualtricsBackoffError("Rate limited (429)")
         raise_for_error(response)
         return response
 
