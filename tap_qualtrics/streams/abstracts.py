@@ -539,4 +539,15 @@ class ChildBaseStream(IncrementalStream):
                             child.sync(state=state, transformer=transformer, parent_id=record)
             finally:
                 state = self.write_bookmark(state, self.tap_stream_id, value=max_bk)
+                # Keep child bookmarks moving with the parent only when both streams
+                # use the same replication key (e.g. segments -> segment_contacts).
+                for child in self.child_to_sync:
+                    child_keys = getattr(child, "replication_keys", []) or []
+                    parent_keys = self.replication_keys or []
+                    if child_keys and parent_keys and child_keys[0] == parent_keys[0]:
+                        state = child.write_bookmark(
+                            state,
+                            child.tap_stream_id,
+                            value=max_bk,
+                        )
             return counter.value
