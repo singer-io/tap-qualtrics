@@ -140,6 +140,20 @@ class TestAuditExportGetRecords(unittest.TestCase):
 
         self.assertEqual(len(records), 1)
 
+    def test_ndjson_missing_id_gets_hashed_id(self):
+        stream = self._stream()
+        stream.client.post.return_value = {"result": {"id": "exp1"}}
+        stream.client.poll_export.return_value = {"result": {"status": "complete", "fileId": "f1"}}
+        file_resp = MagicMock()
+        file_resp.content = b'{"timestamp": "2021-01-01", "actor": {"id": "u1"}}\n'
+        stream.client.get_file.return_value = file_resp
+
+        records = list(stream.get_records(parent_id={"name": "login"}))
+
+        self.assertEqual(len(records), 1)
+        self.assertIn("id", records[0])
+        self.assertTrue(records[0]["id"])
+
 
 # ---------------------------------------------------------------------------
 # sync
@@ -248,6 +262,23 @@ class TestAuditExportDiscoverDynamicEntries(unittest.TestCase):
         self.assertEqual(len(entries), 1)
         stream_name, schema, key_props = entries[0]
         self.assertEqual(stream_name, "audit_export__login")
+        self.assertIn("id", schema["properties"])
+        self.assertEqual(key_props, ["id"])
+
+    def test_successful_discovery_without_id_still_sets_key_props(self):
+        client = _make_client()
+        client.get.return_value = {"result": {"elements": [{"name": "login"}]}}
+        client.post.return_value = {"result": {"id": "exp1"}}
+        client.poll_export.return_value = {"result": {"status": "complete", "fileId": "f1"}}
+        file_resp = MagicMock()
+        file_resp.content = b'{"timestamp": "2021-01-01", "actor": {"id": "u1"}}\n'
+        client.get_file.return_value = file_resp
+
+        entries, _ = AuditExport.discover_dynamic_entries(client)
+
+        self.assertEqual(len(entries), 1)
+        _, schema, key_props = entries[0]
+        self.assertEqual(key_props, ["id"])
         self.assertIn("id", schema["properties"])
 
     def test_no_export_id_in_discover_skips(self):

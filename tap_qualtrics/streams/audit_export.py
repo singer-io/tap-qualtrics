@@ -1,5 +1,6 @@
 ﻿import io
 import json
+import hashlib
 import zipfile
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterator
@@ -24,6 +25,20 @@ from tap_qualtrics.exceptions import (
 from tap_qualtrics.streams.abstracts import IncrementalStream
 
 LOGGER = get_logger()
+
+
+def _canonical_json(value: Any) -> str:
+    """Return deterministic JSON for hashing, tolerating non-serializable values."""
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _ensure_record_id(record: Dict) -> Dict:
+    """Guarantee a stable string id for Singer key_properties compatibility."""
+    if record.get("id"):
+        return record
+    digest = hashlib.sha256(_canonical_json(record).encode("utf-8")).hexdigest()
+    record["id"] = digest
+    return record
 
 
 class AuditExport(IncrementalStream):
@@ -113,10 +128,15 @@ class AuditExport(IncrementalStream):
                 skipped.append(event_name)
                 continue
 
+            records = [_ensure_record_id(record or {}) for record in records]
+
             schema = infer_schema(records)
             schema["properties"]["event_type"] = {"type": ["null", "string"]}
-            # Use id as primary key only when the event type actually emits it
-            key_props = ["id"] if "id" in schema.get("properties", {}) else []
+            schema.setdefault("properties", {}).setdefault(
+                "id",
+                {"type": ["null", "string"]},
+            )
+            key_props = ["id"]
             entries.append((f"audit_export__{event_name}", schema, key_props))
             LOGGER.info(
                 "Discovered schema for audit_export__%s (%d sample records).",
@@ -163,7 +183,7 @@ class AuditExport(IncrementalStream):
                 if line:
                     record = json.loads(line)
                     record["event_type"] = event_name
-                    yield record
+                    yield _ensure_record_id(record)
             return
         except (json.JSONDecodeError, ValueError):
             pass
@@ -177,11 +197,12 @@ class AuditExport(IncrementalStream):
         if isinstance(records, list):
             for record in records:
                 record["event_type"] = event_name
+                _ensure_record_id(record)
             yield from records
         elif isinstance(records, dict):
             for record in records.get("events", [records]):
                 record["event_type"] = event_name
-                yield record
+                yield _ensure_record_id(record)
 
     def sync(  # pylint: disable=too-many-branches
         self,
