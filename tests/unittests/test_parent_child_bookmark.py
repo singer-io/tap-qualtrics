@@ -1,7 +1,7 @@
 """Tests for parent-child stream bookmark propagation via sync.py."""
 import unittest
 from unittest.mock import MagicMock, patch
-from tap_qualtrics.streams.abstracts import FullTableStream, IncrementalStream
+from tap_qualtrics.streams.abstracts import FullTableStream
 
 
 class ConcreteParent(FullTableStream):

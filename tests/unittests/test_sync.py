@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 from tap_qualtrics.sync import sync, update_currently_syncing
 
 

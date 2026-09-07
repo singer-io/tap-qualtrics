@@ -2,7 +2,7 @@
 
 
 class DirectoryContacts(DirectoryChildStream):
-    """Contacts in a directory (page size 500); has contact_transactions child."""
+    """Contacts in a directory (page size 100); has contact_transactions child."""
     tap_stream_id = "directories_contacts"
     key_properties = ["contactId"]
     replication_method = "FULL_TABLE"

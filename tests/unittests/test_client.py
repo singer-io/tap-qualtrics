@@ -4,7 +4,13 @@ from unittest.mock import patch, MagicMock
 from parameterized import parameterized
 from requests.exceptions import Timeout, ConnectionError, ChunkedEncodingError
 from tap_qualtrics.client import Client
-from tap_qualtrics.exceptions import *
+from tap_qualtrics.exceptions import (
+    QualtricsBadRequestError,
+    QualtricsConflictError,
+    QualtricsForbiddenError,
+    QualtricsNotFoundError,
+    QualtricsUnauthorizedError,
+)
 
 
 default_config = {

@@ -1,7 +1,7 @@
 """Unit tests for stream pagination and async export flows."""
 import json
 import unittest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 from tap_qualtrics.streams.abstracts import FullTableStream, _get_nested
 from tap_qualtrics.streams.survey_response_export import SurveyResponseExport as SurveyResponseExportStream
