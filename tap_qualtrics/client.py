@@ -218,7 +218,6 @@ class Client:  # pylint: disable=too-many-instance-attributes
             RequestsConnectionError,
             ChunkedEncodingError,
             Timeout,
-            QualtricsInternalServerError,
             QualtricsServiceUnavailableError,
             QualtricsBadGatewayError,
         ),

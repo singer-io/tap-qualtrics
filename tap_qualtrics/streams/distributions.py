@@ -26,6 +26,13 @@ class Distributions(IncrementalStream):
         survey_id = (parent_record or {}).get("id", "")
         return f"{self.path}?surveyId={survey_id}" if survey_id else ""
 
+    def _enrich_sample(self, sample: dict, parent_record: dict) -> dict:
+        enriched = dict(sample or {})
+        survey_id = (parent_record or {}).get("id", "")
+        if survey_id:
+            enriched["survey_id"] = survey_id
+        return enriched
+
     def sync(self, state, transformer, parent_id=None):
         bookmark = get_bookmark(
             state, self.tap_stream_id, self.replication_keys[0], self.client.start_date

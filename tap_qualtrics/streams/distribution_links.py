@@ -1,5 +1,5 @@
 ﻿from singer import get_logger
-from tap_qualtrics.exceptions import QualtricsInternalServerError
+from tap_qualtrics.exceptions import QualtricsError, QualtricsInternalServerError
 from tap_qualtrics.streams.abstracts import ChildBaseStream
 
 LOGGER = get_logger()
@@ -20,7 +20,6 @@ class DistributionLinks(ChildBaseStream):
 
     def get_url_endpoint(self, parent_obj=None):
         distribution_id = (parent_obj or {}).get("id", "")
-        # store survey_id as instance attr; get_records reads it for API requirements
         self._survey_id = (parent_obj or {}).get("survey_id", "")
         return f"distributions/{distribution_id}/links" if distribution_id else ""
 
@@ -29,6 +28,29 @@ class DistributionLinks(ChildBaseStream):
             record["distributionId"] = parent_record.get("id", "")
             record["modifiedDate"] = parent_record.get("modifiedDate")
         return record
+
+    def check_access(self, parent_record=None):
+        """Probe distribution links using the required surveyId query param."""
+        parent_record = parent_record or {}
+        path = self._make_probe_path(parent_record)
+        if not path:
+            return True
+
+        params = {"pageSize": 1}
+        survey_id = (parent_record or {}).get("survey_id") or getattr(self, "_survey_id", "")
+        if survey_id:
+            params["surveyId"] = survey_id
+
+        try:
+            self.client.get(path, params=params)
+            return True
+        except QualtricsInternalServerError:
+            LOGGER.warning(
+                "Skipping %s for %s: API returned 500 (not a link distribution)",
+                self.tap_stream_id,
+                path,
+            )
+            return False
 
     def get_records(self, parent_id=None, bookmark=""):
         _ = (parent_id, bookmark)
@@ -39,19 +61,12 @@ class DistributionLinks(ChildBaseStream):
         try:
             yield from self._paginate(self.url_endpoint, params)
         except QualtricsInternalServerError:
-            # The /links endpoint only works for link-type distributions; skip others gracefully
             LOGGER.warning(
-                (
-                    "Skipping distribution_links for %s: API returned 500 "
-                    "(not a link distribution)"
-                ),
+                "Skipping %s for %s: API returned 500 (not a link distribution)",
+                self.tap_stream_id,
                 self.url_endpoint,
             )
 
     def _make_probe_path(self, parent_record):
         distribution_id = (parent_record or {}).get("id", "")
-        survey_id = (parent_record or {}).get("survey_id", "")
-        path = f"distributions/{distribution_id}/links"
-        if distribution_id and survey_id:
-            return f"{path}?surveyId={survey_id}"
-        return path if distribution_id else ""
+        return f"distributions/{distribution_id}/links" if distribution_id else ""

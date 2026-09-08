@@ -22,16 +22,11 @@
         "targetIds": {
             "type": [
                 "null",
-                {
-                    "type": "array",
-                    "items": {
-                        "type": [
-                            "null",
-                            "string"
-                        ]
-                    }
-                }
-            ]
+                "array"
+            ],
+            "items": {
+                "type": "string"
+            }
         },
         "emailType": {
             "type": [
@@ -48,24 +43,22 @@
         "timePeriodLimit": {
             "type": [
                 "null",
-                {
-                    "type": "object",
-                    "properties": {
-                        "period": {
-                            "type": [
-                                "null",
-                                "string"
-                            ]
-                        },
-                        "numMessages": {
-                            "type": [
-                                "null",
-                                "integer"
-                            ]
-                        }
-                    }
+                "object"
+            ],
+            "properties": {
+                "period": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "numMessages": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
                 }
-            ]
+            }
         },
         "alwaysSend": {
             "type": [

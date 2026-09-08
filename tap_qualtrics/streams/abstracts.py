@@ -12,7 +12,13 @@ from singer import (
     write_schema,
 )
 
-from tap_qualtrics.exceptions import QualtricsError, QualtricsInternalServerError
+from tap_qualtrics.exceptions import (
+    QualtricsError,
+    QualtricsForbiddenError,
+    QualtricsInternalServerError,
+    QualtricsNotFoundError,
+    QualtricsUnauthorizedError,
+)
 
 LOGGER = get_logger()
 
@@ -99,9 +105,38 @@ class BaseStream(ABC):
                 return True
             self.client.get(probe, params={"pageSize": 1})
             return True
-        except QualtricsError as exc:
-            LOGGER.warning("Access check failed for stream '%s': %s", self.tap_stream_id, exc)
+        except QualtricsForbiddenError:
+            LOGGER.warning("Stream '%s' is not accessible due to authorization restrictions.", self.tap_stream_id)
             return False
+        except QualtricsUnauthorizedError:
+            LOGGER.warning("Stream '%s' is not accessible due to invalid or expired credentials.", self.tap_stream_id)
+            return False
+        except QualtricsNotFoundError:
+            LOGGER.warning(
+                "Stream '%s' is not available during discovery and will be excluded (HTTP 404).",
+                self.tap_stream_id,
+            )
+            return False
+        except QualtricsInternalServerError:
+            LOGGER.warning(
+                "Stream '%s' is not available during discovery and will be excluded (HTTP 500).",
+                self.tap_stream_id,
+            )
+            return False
+        except QualtricsError as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            if status == 410:
+                LOGGER.warning(
+                    "Stream '%s' is not available during discovery and will be excluded (HTTP 410).",
+                    self.tap_stream_id,
+                )
+                return False
+            LOGGER.warning(
+                "Access probe for stream '%s' failed with non-authorization error: %s",
+                self.tap_stream_id,
+                exc,
+            )
+            raise
 
     def _make_probe_path(
         self,

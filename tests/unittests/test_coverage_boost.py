@@ -397,6 +397,11 @@ class TestStreamEdgeCoverage(unittest.TestCase):
         self.assertEqual(record["modifiedDate"], "2024-01-01")
         self.assertEqual(stream._make_probe_path({"id": "D_1"}), "distributions/D_1/history")
 
+    def test_distributions_enrich_sample_adds_survey_id_for_children(self):
+        stream = Distributions(client=_make_client(), catalog_entry=_make_entry())
+        sample = stream._enrich_sample({"id": "D_1"}, {"id": "SV_1"})
+        self.assertEqual(sample["survey_id"], "SV_1")
+
     @patch("tap_qualtrics.streams.distribution_links.LOGGER")
     def test_distribution_links_probe_path_and_500_handling(self, mock_logger):
         stream = DistributionLinks(client=_make_client(), catalog_entry=_make_entry())
@@ -423,7 +428,7 @@ class TestStreamEdgeCoverage(unittest.TestCase):
         stream = DistributionLinks(client=_make_client(), catalog_entry=_make_entry())
         self.assertEqual(
             stream._make_probe_path({"id": "D_2", "survey_id": "SV_2"}),
-            "distributions/D_2/links?surveyId=SV_2",
+            "distributions/D_2/links",
         )
 
     def test_mailing_lists_date_normalization(self):
