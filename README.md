@@ -166,6 +166,30 @@ This tap:
 - Replication strategy: INCREMENTAL
 - Replication key: `recordedDate`
 
+### Dynamic Export Discovery
+
+The tap includes export-based streams whose schema is not fixed ahead of time. In particular:
+
+- `survey_response_export`
+- `audit_export`
+
+These streams are dynamic because each survey or event type can return a different payload shape. During discovery, the tap does not use a static schema file. Instead, it performs the following flow for each parent resource:
+
+1. Lists the available parent objects (surveys or audit event types).
+2. Creates an async export job with a `POST` request.
+3. Polls the job status until it completes.
+4. Downloads the generated export file.
+5. Parses a sample payload and infers the schema.
+6. Builds a dynamic catalog entry such as `survey_response_export__<survey_id>` or `audit_export__<event_name>`.
+
+This is required for dynamic polling APIs where the schema is only known after data is fetched. Without creating a sample export and inspecting the returned records, the tap cannot infer the correct field structure for each survey or event type.
+
+Important: this discovery path creates remote export jobs and can consume API quota, create account-side artifacts, and add latency. The current implementation infers the schema and then continues without a documented cleanup step for successful or failed export jobs. If Qualtrics exposes a delete/cleanup endpoint for these export jobs, it should be invoked after discovery to reduce resource leakage and avoid repeated job buildup during repeated discovery runs.
+
+The generated dynamic entries are also discovery-time contracts. If a survey or audit event type returns no records during discovery, the tap intentionally skips that parent and does not create a catalog entry for it. In other words, a survey or event type that is empty during discovery will not be available for sync until a new discovery run runs after data exists. This is the expected behavior for dynamic export schema streams: the catalog is derived from actual discovery results, not from a static long-lived list of all possible future objects.
+
+This means that when new survey data or new audit event activity appears later, the tap must be re-run with discovery so a fresh dynamic catalog entry can be created before the stream can be selected or synced.
+
 ### Distributions
 
 **[distributions](https://api.qualtrics.com/234bb6b16cf6d-list-distributions)** *(child of surveys)*
