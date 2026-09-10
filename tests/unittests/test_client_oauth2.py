@@ -9,9 +9,9 @@ from tap_qualtrics.exceptions import QualtricsError
 
 # OAuth2 configuration with client credentials
 oauth2_config = {
-    "clientId": "test_client_id_12345",
-    "clientSecret": "test_client_secret_67890",
-    "dataCenter": "testDataCenter",
+    "client_id": "test_client_id_12345",
+    "client_secret": "test_client_secret_67890",
+    "data_center": "testDataCenter",
     "start_date": "2020-01-01",
     "request_timeout": 30,
 }
@@ -39,37 +39,37 @@ class TestClientOAuth2(unittest.TestCase):
             self.assertEqual(client.oauth_token_endpoint, expected_endpoint)
 
     def test_obtain_oauth_token_missing_client_id(self):
-        """Test that missing clientId raises QualtricsError."""
+        """Test that missing client_id raises QualtricsError."""
         config_missing_client_id = {
-            "clientSecret": "secret",
-            "dataCenter": "testDataCenter",
+            "client_secret": "secret",
+            "data_center": "testDataCenter",
         }
 
         client = Client(config_missing_client_id)
         with self.assertRaises(QualtricsError) as context:
             with client:
                 pass
-        self.assertIn("clientId", str(context.exception))
+        self.assertIn("client_id", str(context.exception))
 
     def test_obtain_oauth_token_missing_client_secret(self):
-        """Test that missing clientSecret raises QualtricsError."""
+        """Test that missing client_secret raises QualtricsError."""
         config_missing_client_secret = {
-            "clientId": "client_id",
-            "dataCenter": "testDataCenter",
+            "client_id": "client_id",
+            "data_center": "testDataCenter",
         }
 
         client = Client(config_missing_client_secret)
         with self.assertRaises(QualtricsError) as context:
             with client:
                 pass
-        self.assertIn("clientSecret", str(context.exception))
+        self.assertIn("client_secret", str(context.exception))
 
     def test_oauth2_basic_auth_encoding(self):
         """Test that client credentials are properly base64 encoded."""
-        credentials = f"{oauth2_config['clientId']}:{oauth2_config['clientSecret']}"
+        credentials = f"{oauth2_config['client_id']}:{oauth2_config['client_secret']}"
         expected_encoding = base64.b64encode(credentials.encode()).decode()
 
-        # The encoding should match the format: base64(clientId:clientSecret)
+        # The encoding should match the format: base64(client_id:client_secret)
         self.assertIsNotNone(expected_encoding)
         self.assertTrue(len(expected_encoding) > 0)
 
@@ -149,9 +149,9 @@ class TestClientOAuth2(unittest.TestCase):
         """Test that default OAuth2 scope can be set in config."""
         # The implementation uses the scope from config with empty string as default
         config_without_scope = {
-            "clientId": "test_id",
-            "clientSecret": "test_secret",
-            "dataCenter": "testDataCenter",
+            "client_id": "test_id",
+            "client_secret": "test_secret",
+            "data_center": "testDataCenter",
         }
 
         # Verify the configuration structure
@@ -185,9 +185,9 @@ class TestClientOAuth2(unittest.TestCase):
 
         with patch.object(Client, "_obtain_oauth_token"):
             client = Client(oauth2_config)
-            self.assertEqual(client.config["clientId"], oauth2_config["clientId"])
-            self.assertEqual(client.config["clientSecret"], oauth2_config["clientSecret"])
-            self.assertEqual(client.config["dataCenter"], oauth2_config["dataCenter"])
+            self.assertEqual(client.config["client_id"], oauth2_config["client_id"])
+            self.assertEqual(client.config["client_secret"], oauth2_config["client_secret"])
+            self.assertEqual(client.config["data_center"], oauth2_config["data_center"])
 
     @patch("tap_qualtrics.client.Client._obtain_oauth_token")
     def test_bearer_token_used_in_requests(self, mock_obtain):
@@ -306,7 +306,7 @@ class TestClientOAuth2Integration(unittest.TestCase):
         with patch.object(Client, "_obtain_oauth_token"):
             with Client(oauth2_config) as client:
                 self.assertIsNotNone(client)
-                self.assertEqual(client.config["clientId"], oauth2_config["clientId"])
+                self.assertEqual(client.config["client_id"], oauth2_config["client_id"])
 
     @patch("tap_qualtrics.client.Client._obtain_oauth_token")
     def test_session_closed_on_exit(self, mock_obtain):

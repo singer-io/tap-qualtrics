@@ -32,7 +32,6 @@ from tap_qualtrics.streams.segment_contacts import SegmentContacts
 
 from tap_qualtrics.streams.samples import Samples
 from tap_qualtrics.streams.sample_contacts import SampleContacts
-from tap_qualtrics.streams.sample_definitions import SampleDefinitions
 from tap_qualtrics.streams.transaction_batches import TransactionBatches
 
 from tap_qualtrics.streams.surveys import Surveys
@@ -90,7 +89,6 @@ STREAMS = {
     # Samples
     "samples": Samples,
     "sample_contacts": SampleContacts,
-    "sample_definitions": SampleDefinitions,
     # Transaction Batches
     "transaction_batches": TransactionBatches,
     # Surveys

@@ -76,7 +76,7 @@ class Client:  # pylint: disable=too-many-instance-attributes
 
     def __init__(self, config: Mapping[str, Any]) -> None:
         self.config = config
-        self.data_center = config.get("dataCenter")
+        self.data_center = config.get("data_center")
         self._session = requests.Session()
         self.base_url = f"https://{self.data_center}.qualtrics.com/API/v3"
         config_request_timeout = config.get("request_timeout")
@@ -109,12 +109,12 @@ class Client:  # pylint: disable=too-many-instance-attributes
 
     def _obtain_oauth_token(self) -> None:
         """Obtain OAuth2 access token using client credentials flow."""
-        client_id = self.config.get("clientId")
-        client_secret = self.config.get("clientSecret")
+        client_id = self.config.get("client_id")
+        client_secret = self.config.get("client_secret")
 
         if not client_id or not client_secret:
             raise QualtricsError(
-                "Missing required OAuth2 credentials: clientId and clientSecret"
+                "Missing required OAuth2 credentials: client_id and client_secret"
             )
 
         # Check if the token is still valid

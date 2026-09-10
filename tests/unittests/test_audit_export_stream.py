@@ -231,12 +231,12 @@ class TestAuditExportDiscoverDynamicEntries(unittest.TestCase):
         entries, _ = AuditExport.discover_dynamic_entries(client)
         self.assertEqual(entries, [])
 
-    def test_bad_request_event_type_skipped(self):
+    def test_bad_request_event_type_raises(self):
         client = _make_client()
         client.get.return_value = {"result": {"elements": [{"name": "login"}]}}
         client.post.side_effect = QualtricsBadRequestError("not supported")
-        entries, _ = AuditExport.discover_dynamic_entries(client)
-        self.assertEqual(entries, [])
+        with self.assertRaises(QualtricsBadRequestError):
+            AuditExport.discover_dynamic_entries(client)
 
     def test_no_records_skips_event_type(self):
         client = _make_client()

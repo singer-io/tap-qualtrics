@@ -1,8 +1,8 @@
 {
-    "clientId": "clientId",
-    "clientSecret": "clientSecret",
+    "client_id": "client_id",
+    "client_secret": "client_secret",
     "scope": "scope",
-    "grant_type": "grant_type",
-    "dataCenter": "dataCenter",
+    "grant_type": "client_credentials",
+    "data_center": "data_center",
     "start_date": "2020-07-01T00:00:00Z"
 }

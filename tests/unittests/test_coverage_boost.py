@@ -299,7 +299,7 @@ class TestAbstractCoverageGaps(unittest.TestCase):
         self.assertEqual(mock_get_bookmark.call_count, 1)
 
     @patch("tap_qualtrics.streams.abstracts.LOGGER")
-    def test_child_base_get_records_handles_internal_server_error(self, mock_logger):
+    def test_child_base_get_records_warns_on_internal_server_error(self, mock_logger):
         stream = ConcreteChildBaseDefault(client=_make_client(), catalog_entry=_make_entry())
         stream.url_endpoint = "broken"
         with patch.object(
@@ -307,9 +307,9 @@ class TestAbstractCoverageGaps(unittest.TestCase):
             "_paginate",
             side_effect=QualtricsInternalServerError("500"),
         ):
-            records = list(stream.get_records(parent_id={"id": "P1"}, bookmark=""))
+            with self.assertRaises(QualtricsInternalServerError):
+                list(stream.get_records(parent_id={"id": "P1"}, bookmark=""))
 
-        self.assertEqual(records, [])
         self.assertTrue(mock_logger.warning.called)
 
     def test_child_base_default_methods(self):
@@ -410,9 +410,9 @@ class TestStreamEdgeCoverage(unittest.TestCase):
 
         stream.url_endpoint = "distributions/D_2/links"
         with patch.object(stream, "_paginate", side_effect=QualtricsInternalServerError("500")):
-            records = list(stream.get_records())
+            with self.assertRaises(QualtricsInternalServerError):
+                list(stream.get_records())
 
-        self.assertEqual(records, [])
         self.assertTrue(mock_logger.warning.called)
 
     def test_distribution_links_modify_object(self):

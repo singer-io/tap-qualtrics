@@ -102,9 +102,6 @@ This tap:
 - Primary keys: `batchId`
 - Replication strategy: FULL_TABLE
 
-**[sample_definitions](https://api.qualtrics.com/58551533e5437-list-sample-definitions)** *(child of directories)*
-- Primary keys: `sampleDefinitionId`
-- Replication strategy: FULL_TABLE
 
 ### Mailing Lists
 

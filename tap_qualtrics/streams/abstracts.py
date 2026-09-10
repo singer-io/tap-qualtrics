@@ -111,32 +111,7 @@ class BaseStream(ABC):
         except QualtricsUnauthorizedError:
             LOGGER.warning("Stream '%s' is not accessible due to invalid or expired credentials.", self.tap_stream_id)
             return False
-        except QualtricsNotFoundError:
-            LOGGER.warning(
-                "Stream '%s' is not available during discovery and will be excluded (HTTP 404).",
-                self.tap_stream_id,
-            )
-            return False
-        except QualtricsInternalServerError:
-            LOGGER.warning(
-                "Stream '%s' is not available during discovery and will be excluded (HTTP 500).",
-                self.tap_stream_id,
-            )
-            return False
-        except QualtricsError as exc:
-            status = getattr(getattr(exc, "response", None), "status_code", None)
-            if status == 410:
-                LOGGER.warning(
-                    "Stream '%s' is not available during discovery and will be excluded (HTTP 410).",
-                    self.tap_stream_id,
-                )
-                return False
-            LOGGER.warning(
-                "Access probe for stream '%s' failed with non-authorization error: %s",
-                self.tap_stream_id,
-                exc,
-            )
-            raise
+
 
     def _make_probe_path(
         self,
@@ -591,10 +566,11 @@ class ChildBaseStream(IncrementalStream):
             yield from self._paginate(self.url_endpoint)
         except QualtricsInternalServerError:
             LOGGER.warning(
-                "Skipping %s for %s: API returned 500",
+                "API returned HTTP 500 for %s at %s; allowing retry/backoff to handle the transient server error.",
                 self.tap_stream_id,
                 self.url_endpoint,
             )
+            raise
 
     # pylint: disable=access-member-before-definition
     def get_bookmark(self, state: Dict, stream: str, key: Any = None) -> str:

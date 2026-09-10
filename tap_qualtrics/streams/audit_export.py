@@ -65,6 +65,11 @@ class AuditExport(IncrementalStream):
         discovery_start = client.start_date
         discovery_end = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+        # Discovery intentionally starts a temporary export job for each event type
+        # so we can inspect a sample payload and infer the dynamic schema. This is
+        # not a normal sync job and is intentionally bounded to a single discovery
+        # export per event; if Qualtrics adds a documented cleanup/cancel endpoint,
+        # these temporary jobs should be deleted immediately after schema inference.
         @backoff.on_exception(
             backoff.expo,
             QualtricsBackoffError,
@@ -105,24 +110,19 @@ class AuditExport(IncrementalStream):
 
             try:
                 records = _fetch_records(event_name)
-            except QualtricsBadRequestError:
-                LOGGER.warning(
-                    "Skipping '%s' from catalog: event type not supported by the API.",
-                    event_name,
-                )
-                skipped.append(event_name)
-                continue
             except QualtricsBackoffError:
                 LOGGER.warning(
-                    "Skipping '%s' from catalog: still rate limited after retries.",
+                    "Skipping '%s' from catalog: discovery retries were exhausted because the Qualtrics API remained rate limited, so there is no reliable schema to expose for this event type.",
                     event_name,
                 )
                 skipped.append(event_name)
                 continue
 
+            # Skip event types with no records in the discovery window; they would
+            # otherwise create a dead dynamic schema that cannot produce any real sync data.
             if not records:
                 LOGGER.info(
-                    "Skipping '%s' from catalog: no data found in discovery window.",
+                    "Skipping '%s' from catalog: the export returned no records in the discovery window, so this event type would create an empty schema with no usable data to sync.",
                     event_name,
                 )
                 skipped.append(event_name)

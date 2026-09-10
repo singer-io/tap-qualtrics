@@ -13,7 +13,6 @@ class Directories(FullTableStream):
         "contact_frequency_rules",
         "mailing_lists",
         "opted_out_contacts",
-        "sample_definitions",
         "samples",
         "segments",
         "transaction_batches"

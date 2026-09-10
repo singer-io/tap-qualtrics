@@ -46,11 +46,11 @@ class DistributionLinks(ChildBaseStream):
             return True
         except QualtricsInternalServerError:
             LOGGER.warning(
-                "Skipping %s for %s: API returned 500 (not a link distribution)",
+                "Discovery probe for '%s' at '%s' hit a transient HTTP 500; warning only so the stream remains in the catalog.",
                 self.tap_stream_id,
                 path,
             )
-            return False
+            return True
 
     def get_records(self, parent_id=None, bookmark=""):
         _ = (parent_id, bookmark)
@@ -62,10 +62,11 @@ class DistributionLinks(ChildBaseStream):
             yield from self._paginate(self.url_endpoint, params)
         except QualtricsInternalServerError:
             LOGGER.warning(
-                "Skipping %s for %s: API returned 500 (not a link distribution)",
+                "API returned HTTP 500 for %s at %s; allowing retry/backoff to handle the transient server error.",
                 self.tap_stream_id,
                 self.url_endpoint,
             )
+            raise
 
     def _make_probe_path(self, parent_record):
         distribution_id = (parent_record or {}).get("id", "")

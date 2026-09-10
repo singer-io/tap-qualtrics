@@ -11,9 +11,9 @@ from tap_qualtrics.exceptions import (
 )
 
 _OAUTH_CONFIG = {
-    "clientId": "cid",
-    "clientSecret": "csecret",
-    "dataCenter": "iad1",
+    "client_id": "cid",
+    "client_secret": "csecret",
+    "data_center": "iad1",
     "start_date": "2020-01-01",
 }
 

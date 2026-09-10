@@ -8,11 +8,11 @@ from tap_qualtrics.sync import sync
 LOGGER = singer.get_logger()
 
 REQUIRED_CONFIG_KEYS = [
-    "clientId",
-    "clientSecret",
+    "client_id",
+    "client_secret",
     "scope",
     "grant_type",
-    "dataCenter",
+    "data_center",
     "start_date",
 ]
 

@@ -188,14 +188,15 @@ class TestCheckAccess(unittest.TestCase):
         stream = StreamCls(client=mock_client)
         self.assertFalse(stream.check_access())
 
-    def test_parent_stream_not_found_returns_false(self):
+    def test_parent_stream_not_found_raises(self):
         from tap_qualtrics.exceptions import QualtricsNotFoundError
         StreamCls = self._make_stream(parent=None, path="ticket-exports")
         mock_client = MagicMock()
         mock_client.page_size = 100
         mock_client.get.side_effect = QualtricsNotFoundError("404 Not Found")
         stream = StreamCls(client=mock_client)
-        self.assertFalse(stream.check_access())
+        with self.assertRaises(QualtricsNotFoundError):
+            stream.check_access()
 
 
 if __name__ == "__main__":

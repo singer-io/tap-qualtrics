@@ -14,9 +14,9 @@ from tap_qualtrics.exceptions import (
 
 
 default_config = {
-    "clientId": "dummy_client",
-    "clientSecret": "dummy_secret",
-    "dataCenter": "iad1",
+    "client_id": "dummy_client",
+    "client_secret": "dummy_secret",
+    "data_center": "iad1",
     "start_date": "2020-01-01",
     "request_timeout": 30,
 }

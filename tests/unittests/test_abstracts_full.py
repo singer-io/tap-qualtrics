@@ -132,14 +132,15 @@ class TestBaseStreamHelpers(unittest.TestCase):
                 with self.assertRaises(exc_cls):
                     stream.check_access()
 
-    def test_check_access_http_500_returns_false(self):
+    def test_check_access_http_500_raises(self):
         from tap_qualtrics.exceptions import QualtricsInternalServerError
 
         stream = self._stream()
         stream.client.get.side_effect = QualtricsInternalServerError("HTTP-error-code: 500")
-        self.assertFalse(stream.check_access())
+        with self.assertRaises(QualtricsInternalServerError):
+            stream.check_access()
 
-    def test_check_access_http_410_returns_false(self):
+    def test_check_access_http_410_raises(self):
         from tap_qualtrics.exceptions import QualtricsError
 
         stream = self._stream()
@@ -147,7 +148,8 @@ class TestBaseStreamHelpers(unittest.TestCase):
             "HTTP-error-code: 410, Error: Unknown Error",
             response=MagicMock(status_code=410),
         )
-        self.assertFalse(stream.check_access())
+        with self.assertRaises(QualtricsError):
+            stream.check_access()
 
     def test_check_access_empty_probe_path_returns_true(self):
         """When _make_probe_path returns empty string, check_access returns True."""
@@ -158,13 +160,12 @@ class TestBaseStreamHelpers(unittest.TestCase):
         self.assertTrue(result)
         stream.client.get.assert_not_called()
 
-    def test_contact_frequency_rules_skips_500_during_discovery(self):
+    def test_contact_frequency_rules_500_raises_during_discovery(self):
         stream = ContactFrequencyRules(client=_make_client(), catalog_entry=_make_entry())
-        stream.client.get.side_effect = Exception("simulated 500")
-        # The concrete endpoint should be treated as unavailable for discovery.
         from tap_qualtrics.exceptions import QualtricsInternalServerError
         stream.client.get.side_effect = QualtricsInternalServerError("HTTP-error-code: 500")
-        self.assertFalse(stream.check_access(parent_record={"directoryId": "D1"}))
+        with self.assertRaises(QualtricsInternalServerError):
+            stream.check_access(parent_record={"directoryId": "D1"})
 
     def test_make_probe_path_returns_path(self):
         stream = self._stream()

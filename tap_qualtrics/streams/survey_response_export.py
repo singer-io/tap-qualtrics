@@ -38,6 +38,11 @@ class SurveyResponseExport(IncrementalStream):
             return [], []
         surveys = (surveys_resp.get("result") or {}).get("elements", [])
 
+        # Discovery intentionally starts a temporary export job for each survey so
+        # we can inspect one payload and infer the dynamic schema. This is a
+        # discovery-only probe, not a regular sync run; if Qualtrics exposes a
+        # documented cleanup/cancel API for these temporary exports, they should be
+        # deleted immediately after schema inference to avoid quota churn.
         @backoff.on_exception(
             backoff.expo,
             QualtricsBackoffError,
@@ -79,21 +84,26 @@ class SurveyResponseExport(IncrementalStream):
                 records = _fetch_records(survey_id)
             except QualtricsBackoffError:
                 LOGGER.warning(
-                    "Skipping survey '%s' from catalog: still rate limited after retries.",
+                    "Skipping survey '%s' from catalog: discovery retries were exhausted because the Qualtrics API remained rate limited, so this survey cannot be safely exposed as a syncable export schema.",
                     survey_id,
                 )
                 skipped.append(survey_id)
                 continue
             except Exception as exc:  # pylint: disable=broad-exception-caught
-                LOGGER.warning("Skipping survey '%s' from catalog: %s", survey_id, exc)
+                LOGGER.warning(
+                    "Skipping survey '%s' from catalog: export discovery failed with %s, so this survey is not safe to expose as a schema until the underlying API issue is resolved.",
+                    survey_id,
+                    exc,
+                )
                 skipped.append(survey_id)
                 continue
 
+            # Skip surveys with no records in the discovery window; they would only
+            # produce an empty dynamic schema and no valid sync target.
             if not records:
                 LOGGER.info(
                     (
-                        "Skipping survey '%s' from catalog: no data available "
-                        "in the discovery window."
+                        "Skipping survey '%s' from catalog: the export returned no records in the discovery window, so this survey would create an empty schema with no usable data to sync."
                     ),
                     survey_id,
                 )
