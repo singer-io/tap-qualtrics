@@ -73,4 +73,3 @@ class TestParentChildSync(unittest.TestCase):
         parent.sync(state={}, transformer=transformer)
 
         mock_write_record.assert_called_once_with("parent_stream", {"id": "P1"})
-

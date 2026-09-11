@@ -61,7 +61,7 @@ class TestClient(unittest.TestCase):
         """Set up the client with default configuration."""
         self.client = Client(default_config)
 
-    @parameterized.expand([    
+    @parameterized.expand([
         ["empty value", "", DEFAULT_REQUEST_TIMEOUT],
         ["string value", "12", 12.0],
         ["integer value", 10, 10.0],

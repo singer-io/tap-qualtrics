@@ -20,6 +20,7 @@ from tap_qualtrics.streams.abstracts import IncrementalStream
 
 LOGGER = get_logger()
 DISCOVERY_MAX_WORKERS = 4
+DISCOVERY_EXPORT_LIMIT = 50
 
 class SurveyResponseExport(IncrementalStream):
     tap_stream_id = "survey_response_export"
@@ -46,12 +47,19 @@ class SurveyResponseExport(IncrementalStream):
             LOGGER.warning("Cannot list surveys during discovery: %s", exc)
             return [], []
         surveys = (surveys_resp.get("result") or {}).get("elements", [])
+        unique_survey_ids = []
+        seen = set()
+        for survey in surveys:
+            survey_id = survey.get("id") if isinstance(survey, dict) else survey
+            if not survey_id or survey_id in seen:
+                continue
+            seen.add(survey_id)
+            unique_survey_ids.append(survey_id)
 
-        # Discovery intentionally starts a temporary export job for each survey so
-        # we can inspect one payload and infer the dynamic schema. This is a
-        # discovery-only probe, not a regular sync run; if Qualtrics exposes a
-        # documented cleanup/cancel API for these temporary exports, they should be
-        # deleted immediately after schema inference to avoid quota churn.
+        # Qualtrics has no documented cancel/delete endpoint for these export jobs.
+        # Discovery therefore creates provider-managed jobs solely to infer
+        # per-survey schemas. This side effect is unavoidable provider behavior.
+        # The probe is bounded to a small sample and worker concurrency is capped.
         @backoff.on_exception(
             backoff.expo,
             QualtricsBackoffError,
@@ -64,7 +72,7 @@ class SurveyResponseExport(IncrementalStream):
                 "startDate": client.start_date,
                 "format": "json",
                 "compress": False,
-                "limit": 50,
+                "limit": DISCOVERY_EXPORT_LIMIT,
                 "sortByLastModifiedDate": True,
             }
             start = worker_client.post(f"surveys/{survey_id}/export-responses", body)
@@ -82,16 +90,14 @@ class SurveyResponseExport(IncrementalStream):
             except (json.JSONDecodeError, ValueError):
                 return []
 
-        def _discover_survey(survey):
-            survey_id = survey.get("id") if isinstance(survey, dict) else survey
-            if not survey_id:
-                return (None, "skip", None)
+        def _discover_survey(survey_id):
             try:
                 records = _fetch_records(_worker_client(), survey_id)
             except QualtricsBackoffError:
                 return (survey_id, "rate_limited", None)
-            except Exception as exc:  # pylint: disable=broad-exception-caught
+            except QualtricsError as exc:
                 return (survey_id, "error", exc)
+            # Without sample records, we cannot infer a dynamic schema for this survey.
             if not records:
                 return (survey_id, "empty", None)
 
@@ -108,10 +114,8 @@ class SurveyResponseExport(IncrementalStream):
 
         entries = []
         skipped = []
-        with ThreadPoolExecutor(max_workers=min(DISCOVERY_MAX_WORKERS, len(surveys)) or 1) as executor:
-            for survey_id, status, payload in executor.map(_discover_survey, surveys):
-                if status == "skip":
-                    continue
+        with ThreadPoolExecutor(max_workers=min(DISCOVERY_MAX_WORKERS, len(unique_survey_ids)) or 1) as executor:
+            for survey_id, status, payload in executor.map(_discover_survey, unique_survey_ids):
                 if status == "entry":
                     stream_name, schema, key_properties, record_count = payload
                     entries.append((stream_name, schema, key_properties))

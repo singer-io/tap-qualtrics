@@ -191,6 +191,48 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
         entries, _ = SurveyResponseExport.discover_dynamic_entries(client)
         self.assertEqual(entries, [])
 
+    def test_deduplicates_survey_jobs_within_discovery(self):
+        client = _make_client()
+        client.get.return_value = {"result": {"elements": [{"id": "SV_1"}, {"id": "SV_1"}, {"id": "SV_2"}]}}
+        client.post.return_value = {"result": {"progressId": "pid1"}}
+        client.poll_export.return_value = {"result": {"status": "complete", "fileId": "fid1"}}
+        file_resp = MagicMock()
+        file_resp.content = json.dumps({"responses": [{"responseId": "R_1", "values": {"recordedDate": "2021-01-01"}}]}).encode()
+        client.get_file.return_value = file_resp
+
+        entries, _ = SurveyResponseExport.discover_dynamic_entries(client)
+
+        self.assertEqual(len(entries), 2)
+        self.assertEqual(client.post.call_count, 2)
+
+    @patch("tap_qualtrics.streams.survey_response_export.ThreadPoolExecutor")
+    def test_worker_count_is_capped(self, mock_executor):
+        client = _make_client()
+        client.get.return_value = {
+            "result": {
+                "elements": [{"id": f"SV_{idx}"} for idx in range(10)]
+            }
+        }
+        executor = MagicMock()
+        executor.__enter__.return_value = executor
+        executor.__exit__.return_value = False
+        executor.map.return_value = []
+        mock_executor.return_value = executor
+
+        SurveyResponseExport.discover_dynamic_entries(client)
+
+        self.assertEqual(mock_executor.call_args.kwargs["max_workers"], 4)
+
+    def test_qualtrics_error_is_skipped(self):
+        client = _make_client()
+        client.get.return_value = {"result": {"elements": [{"id": "SV_1"}]}}
+        client.post.side_effect = QualtricsError("known api error")
+
+        entries, skipped = SurveyResponseExport.discover_dynamic_entries(client)
+
+        self.assertEqual(entries, [])
+        self.assertEqual(skipped, ["SV_1"])
+
     def test_no_surveys_returns_empty(self):
         client = _make_client()
         client.get.return_value = {"result": {"elements": []}}
@@ -257,12 +299,12 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
         entries, _ = SurveyResponseExport.discover_dynamic_entries(client)
         self.assertEqual(entries, [])
 
-    def test_generic_exception_skips_survey(self):
+    def test_generic_exception_fails_discovery(self):
         client = _make_client()
         client.get.return_value = {"result": {"elements": [{"id": "SV_1"}]}}
         client.post.side_effect = Exception("unexpected")
-        entries, _ = SurveyResponseExport.discover_dynamic_entries(client)
-        self.assertEqual(entries, [])
+        with self.assertRaises(Exception):
+            SurveyResponseExport.discover_dynamic_entries(client)
 
     def test_survey_with_no_id_skipped(self):
         client = _make_client()

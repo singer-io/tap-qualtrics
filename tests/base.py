@@ -363,7 +363,7 @@ class QualtricsBaseTest(BaseCase):
     def get_credentials():
         """Authentication information for the test account."""
         credentials_dict = {}
-        creds = {'client_id': 'TAP_QUALTRICS_CLIENT_ID', 'client_secret': 'TAP_QUALTRICS_CLIENT_SECRET', 
+        creds = {'client_id': 'TAP_QUALTRICS_CLIENT_ID', 'client_secret': 'TAP_QUALTRICS_CLIENT_SECRET',
                  'scope': 'TAP_QUALTRICS_SCOPE', 'grant_type': 'TAP_QUALTRICS_GRANT_TYPE', 'data_center': 'TAP_QUALTRICS_DATA_CENTER'}
 
         for cred in creds:

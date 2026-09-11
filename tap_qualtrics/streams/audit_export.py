@@ -28,6 +28,7 @@ from tap_qualtrics.streams.abstracts import IncrementalStream
 
 LOGGER = get_logger()
 DISCOVERY_MAX_WORKERS = 4
+DISCOVERY_SAMPLE_RECORD_LIMIT = 50
 
 
 def _canonical_json(value: Any) -> str:
@@ -69,15 +70,22 @@ class AuditExport(IncrementalStream):
             LOGGER.warning("Cannot list audit event types during discovery: %s", exc)
             return [], []
         event_types = (resp.get("result") or {}).get("elements", [])
+        unique_event_names = []
+        seen = set()
+        for event_type in event_types:
+            event_name = event_type.get("name") if isinstance(event_type, dict) else event_type
+            if not event_name or event_name in seen:
+                continue
+            seen.add(event_name)
+            unique_event_names.append(event_name)
 
         discovery_start = client.start_date
         discovery_end = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        # Discovery intentionally starts a temporary export job for each event type
-        # so we can inspect a sample payload and infer the dynamic schema. This is
-        # not a normal sync job and is intentionally bounded to a single discovery
-        # export per event; if Qualtrics adds a documented cleanup/cancel endpoint,
-        # these temporary jobs should be deleted immediately after schema inference.
+        # Qualtrics has no documented cancel/delete endpoint for these export jobs.
+        # Discovery therefore creates provider-managed jobs solely to infer
+        # per-event schemas. This side effect is unavoidable provider behavior.
+        # Worker concurrency is capped and local schema inference uses a bounded sample.
         @backoff.on_exception(
             backoff.expo,
             QualtricsBackoffError,
@@ -101,22 +109,23 @@ class AuditExport(IncrementalStream):
             if not resp_file.content:
                 return []
             try:
-                return [json.loads(l) for l in resp_file.content.splitlines() if l.strip()]
+                records = [json.loads(l) for l in resp_file.content.splitlines() if l.strip()]
+                return records[:DISCOVERY_SAMPLE_RECORD_LIMIT]
             except (json.JSONDecodeError, ValueError):
                 try:
                     raw = resp_file.json()
-                    return raw if isinstance(raw, list) else raw.get("events", [])
+                    records = raw if isinstance(raw, list) else raw.get("events", [])
+                    return records[:DISCOVERY_SAMPLE_RECORD_LIMIT]
                 except Exception:  # pylint: disable=broad-exception-caught
                     return []
 
-        def _discover_event(event_type):
-            event_name = event_type.get("name") if isinstance(event_type, dict) else event_type
-            if not event_name:
-                return (None, "skip", None)
+        def _discover_event(event_name):
             try:
                 records = _fetch_records(_worker_client(), event_name)
             except QualtricsBackoffError:
                 return (event_name, "rate_limited", None)
+            except QualtricsError as exc:
+                return (event_name, "error", exc)
             if not records:
                 return (event_name, "empty", None)
 
@@ -135,10 +144,8 @@ class AuditExport(IncrementalStream):
 
         entries = []
         skipped = []
-        with ThreadPoolExecutor(max_workers=min(DISCOVERY_MAX_WORKERS, len(event_types)) or 1) as executor:
-            for event_name, status, payload in executor.map(_discover_event, event_types):
-                if status == "skip":
-                    continue
+        with ThreadPoolExecutor(max_workers=min(DISCOVERY_MAX_WORKERS, len(unique_event_names)) or 1) as executor:
+            for event_name, status, payload in executor.map(_discover_event, unique_event_names):
                 if status == "entry":
                     stream_name, schema, key_props, record_count = payload
                     entries.append((stream_name, schema, key_props))
@@ -153,10 +160,16 @@ class AuditExport(IncrementalStream):
                         "Skipping '%s' from catalog: discovery retries were exhausted because the Qualtrics API remained rate limited, so there is no reliable schema to expose for this event type.",
                         event_name,
                     )
-                else:
+                elif status == "empty":
                     LOGGER.info(
                         "Skipping '%s' from catalog: the export returned no records in the discovery window, so this event type would create an empty schema with no usable data to sync.",
                         event_name,
+                    )
+                else:
+                    LOGGER.warning(
+                        "Skipping '%s' from catalog: export discovery failed with %s. This provider-side discovery job cannot be canceled by the tap.",
+                        event_name,
+                        payload,
                     )
                 skipped.append(event_name)
 
