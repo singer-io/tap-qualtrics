@@ -181,13 +181,17 @@ These streams are dynamic because each survey or event type can return a differe
 
 This is required for dynamic polling APIs where the schema is only known after data is fetched. Without creating a sample export and inspecting the returned records, the tap cannot infer the correct field structure for each survey or event type.
 
-Important: this discovery path creates remote export jobs and can consume API quota, create account-side artifacts, and add latency. Qualtrics does not provide a documented cancel/delete endpoint for these jobs in the public API used by this tap, so cleanup is a provider-managed lifecycle and this is an unavoidable provider-side side effect. The tap bounds discovery work by using small sample exports where supported, capping worker concurrency, and deduplicating parent resources within a discovery run so duplicate jobs are not created for the same survey or event type.
+## Limitations
 
-Retention/expiration: Qualtrics does not document export job retention/expiration behavior in these endpoint references. Operators should treat export artifacts as provider-managed and monitor account-level quotas and job history accordingly.
+- Discovery-side impact
+    - Each discovery run creates real export jobs against Qualtrics, consuming API quota, creating account-side artifacts, and adding latency.
+    - The tap limits this impact by using small sample exports where supported, capping worker concurrency, and deduplicating parent resources so the same survey or event type does not spawn duplicate jobs in one run.
 
-The generated dynamic entries are also discovery-time contracts. If a survey or audit event type returns no records during discovery, the tap intentionally skips that parent and does not create a catalog entry for it. In other words, a survey or event type that is empty during discovery will not be available for sync until a new discovery run runs after data exists. This is the expected behavior for dynamic export schema streams: the catalog is derived from actual discovery results, not from a static long-lived list of all possible future objects.
+- Dynamic, discovery-time catalog
+    - Catalog entries are generated only from what discovery actually finds, not from a static list of all possible objects.
+    - A survey or audit event type with no records at discovery time is skipped entirely; no catalog entry is created for it.
+    - As a result, new survey data or event activity that appears later will not be selectable or syncable until discovery is re-run and produces a fresh catalog entry.
 
-This means that when new survey data or new audit event activity appears later, the tap must be re-run with discovery so a fresh dynamic catalog entry can be created before the stream can be selected or synced.
 
 ### Distributions
 
