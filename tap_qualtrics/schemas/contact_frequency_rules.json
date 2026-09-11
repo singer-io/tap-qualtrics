@@ -1,0 +1,82 @@
+{
+    "type": "object",
+    "properties": {
+        "directoryId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "targetId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "targetType": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "targetIds": {
+            "type": [
+                "null",
+                "array"
+            ],
+            "items": {
+                "type": "string"
+            }
+        },
+        "emailType": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "daysBetween": {
+            "type": [
+                "null",
+                "integer"
+            ]
+        },
+        "timePeriodLimit": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "properties": {
+                "period": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "numMessages": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                }
+            }
+        },
+        "alwaysSend": {
+            "type": [
+                "null",
+                "boolean"
+            ]
+        },
+        "ruleId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "mutuallyExclusive": {
+            "type": [
+                "null",
+                "boolean"
+            ]
+        }
+    }
+}

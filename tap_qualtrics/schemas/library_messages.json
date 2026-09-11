@@ -1,0 +1,26 @@
+{
+    "type": "object",
+    "properties": {
+        "libraryId": {
+            "type": ["null", "string"]
+        },
+        "id": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "description": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "category": {
+            "type": [
+                "null",
+                "string"
+            ]
+        }
+    }
+}

@@ -1,0 +1,345 @@
+{
+    "type": "object",
+    "properties": {
+        "ChoiceOrder": {
+            "type": [
+                "null",
+                "array"
+            ],
+            "items": {
+                "type": [
+                    "null",
+                    "string"
+                ]
+            }
+        },
+        "Choices": {
+            "type": "object",
+            "properties": {
+                "1": {
+                    "type": "object",
+                    "properties": {
+                        "Display": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        }
+                    }
+                },
+                "2": {
+                    "type": "object",
+                    "properties": {
+                        "Display": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "Configuration": {
+            "type": "object",
+            "properties": {
+                "QuestionDescriptionOption": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "TextPosition": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "ChoiceColumnWidth": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "RepeatHeaders": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "WhiteSpace": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "LabelPosition": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "NumColumns": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "MobileFirst": {
+                    "type": [
+                        "null",
+                        "boolean"
+                    ]
+                }
+            }
+        },
+        "DataExportTag": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "Language": {
+            "type": [
+                "null",
+                "array"
+            ],
+            "items": {
+                "type": "string"
+            }
+        },
+        "NextAnswerId": {
+            "type": [
+                "null",
+                "integer"
+            ]
+        },
+        "NextChoiceId": {
+            "type": [
+                "null",
+                "integer"
+            ]
+        },
+        "QuestionDescription": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "QuestionID": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "QuestionText": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "QuestionType": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "Randomization": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "RecodeValues": {
+            "type": "object",
+            "properties": {
+                "1": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "2": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "3": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                }
+            }
+        },
+        "Selector": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "SubSelector": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "Validation": {
+            "type": "object",
+            "properties": {
+                "Settings": {
+                    "type": "object",
+                    "properties": {
+                        "CustomValidation": {
+                            "type": "object",
+                            "properties": {
+                                "Logic": {
+                                    "type": "object",
+                                    "properties": {
+                                        "Type": {
+                                            "type": [
+                                                "null",
+                                                "string"
+                                            ]
+                                        },
+                                        "property1": {
+                                            "type": "object",
+                                            "properties": {
+                                                "ChoiceLocator": {
+                                                    "type": [
+                                                        "null",
+                                                        "string"
+                                                    ]
+                                                },
+                                                "LogicType": {
+                                                    "type": [
+                                                        "null",
+                                                        "string"
+                                                    ]
+                                                },
+                                                "Operator": {
+                                                    "type": [
+                                                        "null",
+                                                        "string"
+                                                    ]
+                                                },
+                                                "QuestionID": {
+                                                    "type": [
+                                                        "null",
+                                                        "string"
+                                                    ]
+                                                },
+                                                "QuestionIsInLoop": {
+                                                    "type": [
+                                                        "null",
+                                                        "string"
+                                                    ]
+                                                },
+                                                "Type": {
+                                                    "type": [
+                                                        "null",
+                                                        "string"
+                                                    ]
+                                                }
+                                            }
+                                        },
+                                        "property2": {
+                                            "type": "object",
+                                            "properties": {
+                                                "ChoiceLocator": {
+                                                    "type": [
+                                                        "null",
+                                                        "string"
+                                                    ]
+                                                },
+                                                "LogicType": {
+                                                    "type": [
+                                                        "null",
+                                                        "string"
+                                                    ]
+                                                },
+                                                "Operator": {
+                                                    "type": [
+                                                        "null",
+                                                        "string"
+                                                    ]
+                                                },
+                                                "QuestionID": {
+                                                    "type": [
+                                                        "null",
+                                                        "string"
+                                                    ]
+                                                },
+                                                "QuestionIsInLoop": {
+                                                    "type": [
+                                                        "null",
+                                                        "string"
+                                                    ]
+                                                },
+                                                "Type": {
+                                                    "type": [
+                                                        "null",
+                                                        "string"
+                                                    ]
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "Message": {
+                                    "type": "object",
+                                    "properties": {
+                                        "description": {
+                                            "type": [
+                                                "null",
+                                                "string"
+                                            ]
+                                        },
+                                        "libraryID": {
+                                            "type": [
+                                                "null",
+                                                "string"
+                                            ]
+                                        },
+                                        "messageID": {
+                                            "type": [
+                                                "null",
+                                                "string"
+                                            ]
+                                        },
+                                        "subMessageID": {
+                                            "type": [
+                                                "null",
+                                                "string"
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "ForceResponse": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        },
+                        "ForceResponseType": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        },
+                        "Type": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "additionalProperties": true
+}

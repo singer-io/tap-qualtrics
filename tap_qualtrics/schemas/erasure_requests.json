@@ -1,0 +1,73 @@
+{
+    "type": "object",
+    "properties": {
+        "requestid": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "status": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "user": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "numEmailsRequested": {
+            "type": [
+                "null",
+                "integer"
+            ]
+        },
+        "emailsNotFound": {
+            "type": "array",
+            "items": {
+                "type": [
+                    "null",
+                    "string"
+                ]
+            }
+        },
+        "emailList": {
+            "type": "array",
+            "items": {
+                "type": [
+                    "null",
+                    "string"
+                ]
+            }
+        },
+        "searchOnly": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "failureReason": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "created": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "updated": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        }
+    }
+}

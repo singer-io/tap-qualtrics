@@ -1,0 +1,88 @@
+{
+    "type": "object",
+    "properties": {
+        "modifiedDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "contactId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "contactLookupId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "distributionId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "status": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "surveyLink": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "contactFrequencyRuleId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "responseId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "responseCompletedAt": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "sentAt": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "openedAt": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "responseStartedAt": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "surveySessionId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        }
+    }
+}

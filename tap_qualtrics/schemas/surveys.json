@@ -1,0 +1,43 @@
+{
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "name": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "ownerId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "lastModified": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "creationDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "isActive": {
+            "type": [
+                "null",
+                "boolean"
+            ]
+        }
+    }
+}
