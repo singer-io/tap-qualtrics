@@ -1,4 +1,5 @@
 import json
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, Iterator
 
 import backoff
@@ -13,10 +14,12 @@ from singer import (
     write_schema,
 )
 
+from tap_qualtrics.client import Client
 from tap_qualtrics.exceptions import QualtricsBackoffError, QualtricsError
 from tap_qualtrics.streams.abstracts import IncrementalStream
 
 LOGGER = get_logger()
+DISCOVERY_MAX_WORKERS = 4
 
 class SurveyResponseExport(IncrementalStream):
     tap_stream_id = "survey_response_export"
@@ -31,6 +34,12 @@ class SurveyResponseExport(IncrementalStream):
     def discover_dynamic_entries(cls, client):  # pylint: disable=too-many-locals
         """Return ((stream_name, schema, key_properties)[], skipped_ids[]) for each survey."""
         from tap_qualtrics.schema import infer_schema  # pylint: disable=import-outside-toplevel
+
+        def _worker_client():
+            if isinstance(client, Client):
+                return client.fork()
+            return client
+
         try:
             surveys_resp = client.get("surveys")
         except QualtricsError as exc:
@@ -49,7 +58,7 @@ class SurveyResponseExport(IncrementalStream):
             max_tries=5,
             jitter=backoff.full_jitter,
         )
-        def _fetch_records(survey_id):
+        def _fetch_records(worker_client, survey_id):
             """Run one full export cycle; QualtricsBackoffError triggers exponential retry."""
             body = {
                 "startDate": client.start_date,
@@ -58,69 +67,77 @@ class SurveyResponseExport(IncrementalStream):
                 "limit": 50,
                 "sortByLastModifiedDate": True,
             }
-            start = client.post(f"surveys/{survey_id}/export-responses", body)
+            start = worker_client.post(f"surveys/{survey_id}/export-responses", body)
             export_id = (start.get("result") or {}).get("progressId", "")
             if not export_id:
                 return []
-            final = client.poll_export(f"surveys/{survey_id}/export-responses/{export_id}")
+            final = worker_client.poll_export(f"surveys/{survey_id}/export-responses/{export_id}")
             file_id = (final.get("result") or {}).get("fileId", "")
             if not file_id:
                 return []
-            resp = client.get_file(f"surveys/{survey_id}/export-responses/{file_id}/file")
+            resp = worker_client.get_file(f"surveys/{survey_id}/export-responses/{file_id}/file")
             try:
                 data = json.loads(resp.content)
                 return data.get("responses", [])
             except (json.JSONDecodeError, ValueError):
                 return []
 
-        entries = []
-        skipped = []
-        for survey in surveys:
+        def _discover_survey(survey):
             survey_id = survey.get("id") if isinstance(survey, dict) else survey
             if not survey_id:
-                continue
-
+                return (None, "skip", None)
             try:
-                records = _fetch_records(survey_id)
+                records = _fetch_records(_worker_client(), survey_id)
             except QualtricsBackoffError:
-                LOGGER.warning(
-                    "Skipping survey '%s' from catalog: discovery retries were exhausted because the Qualtrics API remained rate limited, so this survey cannot be safely exposed as a syncable export schema.",
-                    survey_id,
-                )
-                skipped.append(survey_id)
-                continue
+                return (survey_id, "rate_limited", None)
             except Exception as exc:  # pylint: disable=broad-exception-caught
-                LOGGER.warning(
-                    "Skipping survey '%s' from catalog: export discovery failed with %s, so this survey is not safe to expose as a schema until the underlying API issue is resolved.",
-                    survey_id,
-                    exc,
-                )
-                skipped.append(survey_id)
-                continue
-
-            # Skip surveys with no records in the discovery window; they would only
-            # produce an empty dynamic schema and no valid sync target.
+                return (survey_id, "error", exc)
             if not records:
-                LOGGER.info(
-                    (
-                        "Skipping survey '%s' from catalog: the export returned no records in the discovery window, so this survey would create an empty schema with no usable data to sync."
-                    ),
-                    survey_id,
-                )
-                skipped.append(survey_id)
-                continue
+                return (survey_id, "empty", None)
 
             for record in records:
                 record["survey_id"] = survey_id
                 record["recorded_date"] = (record.get("values") or {}).get("recordedDate", "")
 
             schema = infer_schema(records)
-            entries.append((f"survey_response_export__{survey_id}", schema, cls.key_properties))
-            LOGGER.info(
-                "Discovered schema for survey_response_export__%s (%d sample records).",
+            return (
                 survey_id,
-                len(records),
+                "entry",
+                (f"survey_response_export__{survey_id}", schema, cls.key_properties, len(records)),
             )
+
+        entries = []
+        skipped = []
+        with ThreadPoolExecutor(max_workers=min(DISCOVERY_MAX_WORKERS, len(surveys)) or 1) as executor:
+            for survey_id, status, payload in executor.map(_discover_survey, surveys):
+                if status == "skip":
+                    continue
+                if status == "entry":
+                    stream_name, schema, key_properties, record_count = payload
+                    entries.append((stream_name, schema, key_properties))
+                    LOGGER.info(
+                        "Discovered schema for survey_response_export__%s (%d sample records).",
+                        survey_id,
+                        record_count,
+                    )
+                    continue
+                if status == "rate_limited":
+                    LOGGER.warning(
+                        "Skipping survey '%s' from catalog: discovery retries were exhausted because the Qualtrics API remained rate limited, so this survey cannot be safely exposed as a syncable export schema.",
+                        survey_id,
+                    )
+                elif status == "empty":
+                    LOGGER.info(
+                        "Skipping survey '%s' from catalog: the export returned no records in the discovery window, so this survey would create an empty schema with no usable data to sync.",
+                        survey_id,
+                    )
+                else:
+                    LOGGER.warning(
+                        "Skipping survey '%s' from catalog: export discovery failed with %s, so this survey is not safe to expose as a schema until the underlying API issue is resolved.",
+                        survey_id,
+                        payload,
+                    )
+                skipped.append(survey_id)
 
         return entries, skipped
 

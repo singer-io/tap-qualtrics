@@ -163,6 +163,28 @@ class TestSurveyResponseExportSync(unittest.TestCase):
 
 class TestSurveyResponseExportDiscover(unittest.TestCase):
 
+    @patch("tap_qualtrics.streams.survey_response_export.ThreadPoolExecutor")
+    def test_discovery_uses_thread_pool(self, mock_executor):
+        client = _make_client()
+        client.get.return_value = {"result": {"elements": [{"id": "SV_1"}]}}
+        client.post.return_value = {"result": {"progressId": "pid1"}}
+        client.poll_export.return_value = {"result": {"status": "complete", "fileId": "fid1"}}
+        file_resp = MagicMock()
+        file_resp.content = json.dumps({"responses": [{"responseId": "R_1", "values": {"recordedDate": "2021-01-01"}}]}).encode()
+        client.get_file.return_value = file_resp
+        executor = MagicMock()
+        executor.__enter__.return_value = executor
+        executor.__exit__.return_value = False
+        executor.map.return_value = [("SV_1", "entry", ("survey_response_export__SV_1", {"type": "object", "properties": {}}, ["responseId"], 1))]
+        mock_executor.return_value = executor
+
+        entries, skipped = SurveyResponseExport.discover_dynamic_entries(client)
+
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(skipped, [])
+        mock_executor.assert_called_once()
+        executor.map.assert_called_once()
+
     def test_get_error_returns_empty(self):
         client = _make_client()
         client.get.side_effect = QualtricsError("error")

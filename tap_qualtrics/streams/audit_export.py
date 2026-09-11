@@ -2,6 +2,7 @@
 import json
 import hashlib
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterator
 
@@ -17,6 +18,7 @@ from singer import (
     write_schema,
 )
 
+from tap_qualtrics.client import Client
 from tap_qualtrics.exceptions import (
     QualtricsBackoffError,
     QualtricsBadRequestError,
@@ -25,6 +27,7 @@ from tap_qualtrics.exceptions import (
 from tap_qualtrics.streams.abstracts import IncrementalStream
 
 LOGGER = get_logger()
+DISCOVERY_MAX_WORKERS = 4
 
 
 def _canonical_json(value: Any) -> str:
@@ -55,6 +58,11 @@ class AuditExport(IncrementalStream):
         """Return ((stream_name, schema, key_properties)[], skipped_names[]) for each event type."""
         from tap_qualtrics.schema import infer_schema  # pylint: disable=import-outside-toplevel
 
+        def _worker_client():
+            if isinstance(client, Client):
+                return client.fork()
+            return client
+
         try:
             resp = client.get("audit-events")
         except QualtricsError as exc:
@@ -76,20 +84,20 @@ class AuditExport(IncrementalStream):
             max_tries=5,
             jitter=backoff.full_jitter,
         )
-        def _fetch_records(event_name):
+        def _fetch_records(worker_client, event_name):
             """Fetch all records in a single request; retries on rate limit."""
             body = {
                 "eventName": event_name,
                 "startDate": discovery_start,
                 "endDate": discovery_end,
             }
-            start = client.post("audit-exports", body)
+            start = worker_client.post("audit-exports", body)
             export_id = (start.get("result") or {}).get("id", "")
             if not export_id:
                 return []
-            final = client.poll_export(f"audit-exports/{export_id}")
+            final = worker_client.poll_export(f"audit-exports/{export_id}")
             file_id = (final.get("result") or {}).get("fileId", export_id)
-            resp_file = client.get_file(f"audit-exports/{export_id}/files/{file_id}")
+            resp_file = worker_client.get_file(f"audit-exports/{export_id}/files/{file_id}")
             if not resp_file.content:
                 return []
             try:
@@ -101,48 +109,56 @@ class AuditExport(IncrementalStream):
                 except Exception:  # pylint: disable=broad-exception-caught
                     return []
 
-        entries = []
-        skipped = []
-        for event_type in event_types:
+        def _discover_event(event_type):
             event_name = event_type.get("name") if isinstance(event_type, dict) else event_type
             if not event_name:
-                continue
-
+                return (None, "skip", None)
             try:
-                records = _fetch_records(event_name)
+                records = _fetch_records(_worker_client(), event_name)
             except QualtricsBackoffError:
-                LOGGER.warning(
-                    "Skipping '%s' from catalog: discovery retries were exhausted because the Qualtrics API remained rate limited, so there is no reliable schema to expose for this event type.",
-                    event_name,
-                )
-                skipped.append(event_name)
-                continue
-
-            # Skip event types with no records in the discovery window; they would
-            # otherwise create a dead dynamic schema that cannot produce any real sync data.
+                return (event_name, "rate_limited", None)
             if not records:
-                LOGGER.info(
-                    "Skipping '%s' from catalog: the export returned no records in the discovery window, so this event type would create an empty schema with no usable data to sync.",
-                    event_name,
-                )
-                skipped.append(event_name)
-                continue
+                return (event_name, "empty", None)
 
             records = [_ensure_record_id(record or {}) for record in records]
-
             schema = infer_schema(records)
             schema["properties"]["event_type"] = {"type": ["null", "string"]}
             schema.setdefault("properties", {}).setdefault(
                 "id",
                 {"type": ["null", "string"]},
             )
-            key_props = ["id"]
-            entries.append((f"audit_export__{event_name}", schema, key_props))
-            LOGGER.info(
-                "Discovered schema for audit_export__%s (%d sample records).",
+            return (
                 event_name,
-                len(records),
+                "entry",
+                (f"audit_export__{event_name}", schema, ["id"], len(records)),
             )
+
+        entries = []
+        skipped = []
+        with ThreadPoolExecutor(max_workers=min(DISCOVERY_MAX_WORKERS, len(event_types)) or 1) as executor:
+            for event_name, status, payload in executor.map(_discover_event, event_types):
+                if status == "skip":
+                    continue
+                if status == "entry":
+                    stream_name, schema, key_props, record_count = payload
+                    entries.append((stream_name, schema, key_props))
+                    LOGGER.info(
+                        "Discovered schema for audit_export__%s (%d sample records).",
+                        event_name,
+                        record_count,
+                    )
+                    continue
+                if status == "rate_limited":
+                    LOGGER.warning(
+                        "Skipping '%s' from catalog: discovery retries were exhausted because the Qualtrics API remained rate limited, so there is no reliable schema to expose for this event type.",
+                        event_name,
+                    )
+                else:
+                    LOGGER.info(
+                        "Skipping '%s' from catalog: the export returned no records in the discovery window, so this event type would create an empty schema with no usable data to sync.",
+                        event_name,
+                    )
+                skipped.append(event_name)
 
         return entries, skipped
 

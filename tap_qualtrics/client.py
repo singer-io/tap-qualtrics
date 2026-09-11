@@ -98,6 +98,13 @@ class Client:  # pylint: disable=too-many-instance-attributes
     def __exit__(self, exception_type, exception_value, traceback):
         self._session.close()
 
+    def fork(self) -> "Client":
+        """Create a client copy with an independent requests session."""
+        clone = Client(self.config)
+        clone.access_token = self.access_token
+        clone._Client__expires = self.__expires  # pylint: disable=protected-access
+        return clone
+
     def _get_headers(self) -> Dict[str, str]:
         """Get default headers for API requests."""
         return {
