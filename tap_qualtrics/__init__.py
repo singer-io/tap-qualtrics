@@ -36,7 +36,10 @@ def main():
     if parsed_args.state:
         state = parsed_args.state
 
-    with Client(parsed_args.config) as client:
+    with Client(
+        parsed_args.config,
+        config_path=getattr(parsed_args, "config_path", None),
+    ) as client:
         if parsed_args.discover:
             do_discover(client)
         elif parsed_args.catalog:

@@ -1,6 +1,8 @@
 import base64
+import json
 import time
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Tuple
 
 import backoff
@@ -23,6 +25,19 @@ LOGGER = get_logger()
 REQUEST_TIMEOUT = 300
 MAX_POLL_ATTEMPTS = 60
 POLL_INTERVAL = 5  # seconds between status checks
+
+
+def parse_grant_types(grant_type_value: Any) -> set:
+    """Normalize configured grant types into a set."""
+    if not grant_type_value:
+        return set()
+    if isinstance(grant_type_value, str):
+        return {
+            value.strip()
+            for value in grant_type_value.split(",")
+            if value.strip()
+        }
+    return {str(grant_type_value).strip()}
 
 
 def wait_if_retry_after(details_or_exception) -> float:
@@ -74,9 +89,15 @@ def raise_for_error(response: requests.Response) -> None:
 class Client:  # pylint: disable=too-many-instance-attributes
     """HTTP client for the Qualtrics API (OAuth2 client credentials auth)."""
 
-    def __init__(self, config: Mapping[str, Any]) -> None:
+    def __init__(
+        self,
+        config: Mapping[str, Any],
+        config_path: Optional[str] = None,
+    ) -> None:
         self.config = config
+        self.config_path = Path(config_path) if config_path else None
         self.data_center = config.get("data_center")
+        self.grant_types = parse_grant_types(config.get("grant_type"))
         self._session = requests.Session()
         self.base_url = f"https://{self.data_center}.qualtrics.com/API/v3"
         config_request_timeout = config.get("request_timeout")
@@ -87,7 +108,7 @@ class Client:  # pylint: disable=too-many-instance-attributes
         )
         self.start_date = config.get("start_date")
         self.page_size = int(config.get("page_size", 100))
-        self.access_token = None
+        self.access_token = config.get("access_token")
         self.__expires = datetime.now(timezone.utc) - timedelta(seconds=10)
         self.oauth_token_endpoint = f"https://{self.data_center}.qualtrics.com/oauth2/token"
 
@@ -100,7 +121,7 @@ class Client:  # pylint: disable=too-many-instance-attributes
 
     def fork(self) -> "Client":
         """Create a client copy with an independent requests session."""
-        clone = Client(self.config)
+        clone = Client(self.config, config_path=str(self.config_path) if self.config_path else None)
         clone.access_token = self.access_token
         clone._Client__expires = self.__expires  # pylint: disable=protected-access
         return clone
@@ -114,8 +135,84 @@ class Client:  # pylint: disable=too-many-instance-attributes
     def check_api_credentials(self) -> None:
         pass
 
+    def _build_basic_auth_headers(self) -> Dict[str, str]:
+        """Build Basic auth headers for client credentials token requests."""
+        client_id = self.config.get("client_id")
+        client_secret = self.config.get("client_secret")
+        credentials = f"{client_id}:{client_secret}"
+        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+        return {
+            "Authorization": f"Basic {encoded_credentials}"
+        }
+
+    def _persist_authorization_code_tokens(
+        self,
+        access_token: str,
+        refresh_token: Optional[str],
+    ) -> None:
+        """Persist refreshed OAuth tokens for subsequent tap runs."""
+        if isinstance(self.config, dict):
+            self.config["access_token"] = access_token
+            if refresh_token:
+                self.config["refresh_token"] = refresh_token
+
+        if not self.config_path:
+            return
+
+        with self.config_path.open("w", encoding="utf-8") as config_file:
+            json.dump(self.config, config_file, indent=4)
+            config_file.write("\n")
+
+    def _refresh_authorization_code_token(self) -> None:
+        """Refresh an access token for authorization_code clients."""
+        refresh_token = self.config.get("refresh_token")
+        if not refresh_token:
+            raise QualtricsError(
+                "Missing required OAuth2 credential: refresh_token"
+            )
+
+        LOGGER.info("Authenticating with OAuth2 authorization_code flow via refresh_token")
+
+        data = {
+            "grant_type": "refresh_token",
+            "client_id": self.config.get("client_id"),
+            "client_secret": self.config.get("client_secret"),
+            "refresh_token": refresh_token,
+            "redirect_uri": self.config.get("redirect_uri"),
+        }
+        if self.config.get("scope"):
+            data["scope"] = self.config.get("scope")
+
+        response = self._session.post(
+            self.oauth_token_endpoint,
+            data=data,
+            timeout=self.request_timeout,
+        )
+        if response.status_code != 200:
+            raise QualtricsError(
+                f"Failed to refresh OAuth2 token: HTTP {response.status_code}"
+            )
+
+        token_response = response.json()
+        self.access_token = token_response.get("access_token")
+        if not self.access_token:
+            raise QualtricsError("No access_token in OAuth2 response")
+
+        # Qualtrics may rotate refresh tokens on refresh.
+        self._persist_authorization_code_tokens(
+            self.access_token,
+            token_response.get("refresh_token"),
+        )
+
+        LOGGER.info("Successfully refreshed OAuth2 access token")
+
+        expires_in_seconds = token_response.get("expires_in", 60) - 60
+        self.__expires = datetime.now(timezone.utc) + timedelta(
+            seconds=max(expires_in_seconds, 0)
+        )
+
     def _obtain_oauth_token(self) -> None:
-        """Obtain OAuth2 access token using client credentials flow."""
+        """Obtain OAuth2 access token using the configured grant flow."""
         client_id = self.config.get("client_id")
         client_secret = self.config.get("client_secret")
 
@@ -124,18 +221,22 @@ class Client:  # pylint: disable=too-many-instance-attributes
                 "Missing required OAuth2 credentials: client_id and client_secret"
             )
 
-        # Check if the token is still valid
-        if self.access_token and datetime.now(timezone.utc) < self.__expires:
-            LOGGER.info("Using cached OAuth2 access token")
+        if "authorization_code" in self.grant_types:
+            if self.access_token:
+                LOGGER.info(
+                    "Authenticating with OAuth2 authorization_code flow using configured access_token"
+                )
+                return
+            self._refresh_authorization_code_token()
             return
 
-        # Encode credentials in Base64 for Basic auth
-        credentials = f"{client_id}:{client_secret}"
-        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+        # Check if the token is still valid
+        if self.access_token and datetime.now(timezone.utc) < self.__expires:
+            LOGGER.info("Authenticating with OAuth2 client_credentials flow using cached access token")
+            return
 
-        headers = {
-            "Authorization": f"Basic {encoded_credentials}"
-        }
+        LOGGER.info("Authenticating with OAuth2 client_credentials flow")
+        headers = self._build_basic_auth_headers()
 
         data = {
             "grant_type": "client_credentials",
