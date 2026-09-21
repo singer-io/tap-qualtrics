@@ -13,6 +13,7 @@ class Surveys(IncrementalStream):
         "survey",
         "survey_quotas",
         "sms_distributions",
+        "whatsapp_distributions",
         "survey_response_export",
         "distributions",
     ]

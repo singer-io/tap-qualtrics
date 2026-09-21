@@ -10,7 +10,6 @@ LOGGER = singer.get_logger()
 REQUIRED_CONFIG_KEYS = [
     "client_id",
     "client_secret",
-    "scope",
     "grant_type",
     "data_center",
     "start_date",

@@ -25,6 +25,15 @@ LOGGER = get_logger()
 REQUEST_TIMEOUT = 300
 MAX_POLL_ATTEMPTS = 60
 POLL_INTERVAL = 5  # seconds between status checks
+QUALTRICS_SCOPE = (
+    "manage:activity_logs read:activity_logs "
+    "read:contact_frequency_rules read:contact_transactions read:directories "
+    "read:directory_contacts read:distributions read:divisions read:groups "
+    "read:libraries read:mailing_list_contacts read:mailing_lists "
+    "read:organizations read:subscriptions read:survey_responses read:surveys "
+    "read:users write:tickets read:tickets read:samples "
+    "read:directory_segments manage:erasure_requests"
+)
 
 
 def parse_grant_types(grant_type_value: Any) -> set:
@@ -180,8 +189,7 @@ class Client:  # pylint: disable=too-many-instance-attributes
             "refresh_token": refresh_token,
             "redirect_uri": self.config.get("redirect_uri"),
         }
-        if self.config.get("scope"):
-            data["scope"] = self.config.get("scope")
+        data["scope"] = QUALTRICS_SCOPE
 
         response = self._session.post(
             self.oauth_token_endpoint,
@@ -240,7 +248,7 @@ class Client:  # pylint: disable=too-many-instance-attributes
 
         data = {
             "grant_type": "client_credentials",
-            "scope": self.config.get("scope", "")
+            "scope": QUALTRICS_SCOPE,
         }
 
         try:
