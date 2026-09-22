@@ -32,7 +32,7 @@ class TestAuthorizationCodeClientHelpers(unittest.TestCase):
             "client_id": "cid",
             "client_secret": "secret",
             "scope": "manage:all",
-            "grant_type": "authorization_code",
+            "auth_method": "authorization_code",
             "data_center": "sjc1",
             "redirect_uri": "https://connector.qlik.com/auth/oauth/v3.htm",
             "refresh_token": "old-refresh",
@@ -53,7 +53,7 @@ class TestAuthorizationCodeClientHelpers(unittest.TestCase):
         self.assertEqual(clone._Client__expires, client._Client__expires)
 
     def test_build_basic_auth_headers_encodes_credentials(self):
-        client = Client(self._config(grant_type="client_credentials"))
+        client = Client(self._config(auth_method="client_credentials"))
 
         headers = client._build_basic_auth_headers()
 

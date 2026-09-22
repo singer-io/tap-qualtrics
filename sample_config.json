@@ -2,7 +2,7 @@
     "client_id": "client_id",
     "client_secret": "client_secret",
     "scope": "scope",
-    "grant_type": "authorization_code",
+    "auth_method": "authorization_code",
     "data_center": "cde",
     "redirect_uri": "redirect_uri",
     "refresh_token": "sometoken",
@@ -16,7 +16,7 @@
     "client_id": "client_id",
     "client_secret": "client_secret",
     "scope": "scope",
-    "grant_type": "client_credentials",
+    "auth_method": "client_credentials",
     "data_center": "data_center",
     "start_date": "2020-07-01T00:00:00Z"
 }
