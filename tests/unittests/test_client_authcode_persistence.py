@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from tap_qualtrics.client import Client, QUALTRICS_SCOPE, parse_grant_types
+from tap_qualtrics.client import Client, parse_grant_types
 from tap_qualtrics.exceptions import QualtricsError
 
 
@@ -114,7 +114,7 @@ class TestAuthorizationCodeClientHelpers(unittest.TestCase):
 
         self.assertIn("No access_token", str(context.exception))
 
-    def test_refresh_persists_new_tokens_and_hardcoded_scope(self):
+    def test_refresh_persists_new_tokens(self):
         config = self._config(access_token=None)
         client = Client(config)
         client._session = MagicMock()
@@ -130,8 +130,16 @@ class TestAuthorizationCodeClientHelpers(unittest.TestCase):
         client._refresh_authorization_code_token()
 
         post_data = client._session.post.call_args.kwargs["data"]
-        self.assertEqual(post_data["grant_type"], "refresh_token")
-        self.assertEqual(post_data["scope"], QUALTRICS_SCOPE)
+        self.assertEqual(
+            post_data,
+            {
+                "grant_type": "refresh_token",
+                "client_id": "cid",
+                "client_secret": "secret",
+                "refresh_token": "old-refresh",
+                "redirect_uri": "https://connector.qlik.com/auth/oauth/v3.htm",
+            },
+        )
         self.assertEqual(config["access_token"], "new-access")
         self.assertEqual(config["refresh_token"], "new-refresh")
         self.assertGreater(client._Client__expires, datetime.now(timezone.utc))

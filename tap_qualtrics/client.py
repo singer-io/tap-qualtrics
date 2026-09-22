@@ -31,8 +31,8 @@ QUALTRICS_SCOPE = (
     "read:directory_contacts read:distributions read:divisions read:groups "
     "read:libraries read:mailing_list_contacts read:mailing_lists "
     "read:organizations read:subscriptions read:survey_responses read:surveys "
-    "read:users write:tickets read:tickets read:samples "
-    "read:directory_segments manage:erasure_requests"
+    "read:users read:tickets read:samples "
+    "read:directory_segments manage:erasure_requests manage:contact_transactions manage:directory_contacts"
 )
 
 
@@ -189,7 +189,6 @@ class Client:  # pylint: disable=too-many-instance-attributes
             "refresh_token": refresh_token,
             "redirect_uri": self.config.get("redirect_uri"),
         }
-        data["scope"] = QUALTRICS_SCOPE
 
         response = self._session.post(
             self.oauth_token_endpoint,
