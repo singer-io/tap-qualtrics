@@ -212,7 +212,6 @@ def _add_dynamic_entries(client, catalog: Catalog) -> list:
                         "inclusion",
                         "automatic",
                     )
-            mdata = metadata.write(mdata, (), "selected", False)
             catalog.streams.append(
                 CatalogEntry(
                     stream=stream_name,
