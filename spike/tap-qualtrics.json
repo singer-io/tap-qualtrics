@@ -1,0 +1,214 @@
+{
+  "tap_name": "Qualtrics",
+  "required_config_keys": ["clientId","clientSecret", "scope", "grant_type", "dataCenter", "directory_id"],
+  "page_size": 50,
+  "next_page_key": "result.nextPage",
+  "pagination_key": null,
+  "headers": {
+    "Content-Type": "application/x-www-form-urlencoded"
+  },
+  "params": {},
+  "auth_header_key": "Authorization",
+  "auth_config_key": "access_token",
+  "base_url": "https://{dataCenter}.qualtrics.com/API/v3/",
+  "streams": [
+    {
+      "name": "users",
+      "path": "users",
+      "key_properties": ["id"],
+      "replication_method": "FULL_TABLE",
+      "data_key": "result.elements",
+      "doc_link": "https://api.qualtrics.com/c9eeb409d7fe2-list-users",
+      "children": ["user"]
+    },
+    {
+      "name": "user",
+      "path": "users/{userId}",
+      "key_properties": ["id"],
+      "replication_method": "FULL_TABLE",
+      "parent": "users",
+      "data_key": "result",
+      "doc_link": "https://api.qualtrics.com/df14e6c98ea7f-get-user"
+    },
+    {
+      "name": "groups",
+      "path": "groups",
+      "key_properties": ["id"],
+      "replication_method": "FULL_TABLE",
+      "data_key": "result.elements",
+      "doc_link": "https://api.qualtrics.com/0f7e43cc91c22-list-groups",
+      "children": ["group_users"]
+    },
+    {
+      "name": "group_users",
+      "path": "groups/{groupId}/members",
+      "key_properties": ["id"],
+      "replication_method": "FULL_TABLE",
+      "parent": "groups",
+      "data_key": "result.elements",
+      "doc_link": "https://api.qualtrics.com/1e833350364cf-list-users-in-group"
+    },
+    {
+      "name": "audit_events_types",
+      "path": "audit-events",
+      "key_properties": ["id"],
+      "replication_method": "FULL_TABLE",
+      "data_key": "result.elements",
+      "doc_link": "https://api.qualtrics.com/d2af757a5a36b-list-all-audit-event-types"
+    },
+    {
+      "name": "libraries",
+      "path": "libraries",
+      "key_properties": ["libraryId"],
+      "replication_method": "FULL_TABLE",
+      "data_key": "result.elements",
+      "doc_link": "https://api.qualtrics.com/7f0b7d82d44fc-list-libraries",
+      "children": ["libraries_messages", "libraries_survey_questions"]
+    },
+    {
+      "name": "libraries_messages",
+      "path": "libraries/{libraryId}/messages",
+      "key_properties": ["id"],
+      "replication_method": "FULL_TABLE",
+      "parent": "libraries",
+      "data_key": "result.elements",
+      "doc_link": "https://api.qualtrics.com/1d60a66b340fa-list-library-messages"
+    },
+    {
+      "name": "libraries_survey_questions",
+      "path": "libraries/{libraryId}/survey/questions",
+      "key_properties": ["questionId"],
+      "replication_method": "FULL_TABLE",
+      "parent": "libraries",
+      "data_key": "result.elements",
+      "doc_link": "https://api.qualtrics.com/a15d1b5f6d6bb-list-library-questions"
+    },
+    {
+      "name": "events",
+      "path": "logs",
+      "key_properties": ["id"],
+      "replication_method": "FULL_TABLE",
+      "data_key": "result.elements",
+      "doc_link": "https://api.qualtrics.com/821e93ec17a62-list-events"
+    },
+    {
+      "name": "directories",
+      "path": "directories",
+      "key_properties": ["directoryId"],
+      "replication_method": "FULL_TABLE",
+      "data_key": "result.elements",
+      "doc_link": "https://api.qualtrics.com/013df5106e3c7-list-directories-for-a-brand",
+      "children": ["directories_contacts", "mailinglists"]
+    },
+    {
+      "name": "directories_contacts",
+      "path": "directories/{directory_id}/contacts",
+      "key_properties": ["contactId"],
+      "replication_method": "FULL_TABLE",
+      "parent": "directories",
+      "data_key": "result.elements",
+      "doc_link": "https://api.qualtrics.com/d326cdc7e69ae-list-directory-contacts",
+      "children": ["directories_contact"]
+    },
+    {
+      "name": "directories_contact",
+      "path": "directories/{directory_id}/contacts/{contactId}",
+      "key_properties": ["contactId"],
+      "replication_method": "FULL_TABLE",
+      "parent": "directories_contacts",
+      "data_key": "result",
+      "doc_link": "https://api.qualtrics.com/dd105bd826317-get-directory-contact"
+    },
+    {
+      "name": "mailinglists",
+      "path": "directories/{directory_id}/mailinglists",
+      "key_properties": ["mailingListId"],
+      "replication_method": "INCREMENTAL",
+      "replication_keys": ["creationDate"],
+      "parent": "directories",
+      "data_key": "result.elements",
+      "doc_link": "https://api.qualtrics.com/dd83f1535056c-list-mailing-lists"
+    },
+    {
+      "name": "segments",
+      "path": "directories/{directory_id}/segments",
+      "key_properties": ["segmentId"],
+      "replication_method": "INCREMENTAL",
+      "replication_keys": ["creationDate", "lastModifiedDate"],
+      "parent": "directories",
+      "data_key": "result.elements",
+      "doc_link": "https://api.qualtrics.com/dd0fc3f656462-list-segments",
+      "children": ["segment_contacts"]
+    },
+    {
+      "name": "segment_contacts",
+      "path": "directories/{directory_id}/segments/{segmentId}/contacts",
+      "key_properties": ["contactId"],
+      "replication_method": "FULL_TABLE",
+      "parent": "segments",
+      "data_key": "result.elements",
+      "doc_link": "https://api.qualtrics.com/9df25057f5f14-list-contacts-in-segment"
+    },
+    {
+      "name": "surveys",
+      "path": "surveys",
+      "key_properties": ["id"],
+      "replication_method": "INCREMENTAL",
+      "replication_keys": ["lastModified"],
+      "children": ["survey", "questions"],
+      "data_key": "result.elements",
+      "doc_link": "https://api.qualtrics.com/2c55b7ff8b0c7-list-surveys"
+    },
+    {
+      "name": "survey",
+      "path": "/survey-definitions/{surveyId}",
+      "key_properties": ["SurveyID"],
+      "replication_method": "INCREMENTAL",
+      "replication_keys": ["LastModified"],
+      "parent": "surveys",
+      "data_key": "result",
+      "doc_link": "https://api.qualtrics.com/9d0928392673d-get-survey"
+    },
+    {
+      "name": "questions",
+      "path": "/survey-definitions/{surveyId}/questions",
+      "key_properties": ["QuestionID"],
+      "replication_method": "FULL_TABLE",
+      "parent": "survey",
+      "data_key": "result.elements",
+      "doc_link": "https://api.qualtrics.com/957c5f8a4604b-get-questions"
+    },
+    {
+      "name": "question",
+      "path": "/survey-definitions/{surveyId}/questions/{questionId}",
+      "key_properties": ["QuestionID"],
+      "replication_method": "FULL_TABLE",
+      "parent": "questions",
+      "data_key": "result",
+      "doc_link": "https://api.qualtrics.com/1ebd0bb7008f8-get-question"
+    },
+    {
+      "name": "survey_options",
+      "path": "/survey-definitions/{surveyId}/options",
+      "key_properties": ["SurveyStartDate"],
+      "replication_method": "INCREMENTAL",
+      "parent": "survey",
+      "data_key": "result",
+      "doc_link": "https://api.qualtrics.com/021740be5b5b6-get-options"
+    }
+  ],
+  "tap_tester_creds": {
+    "clientId": "TAP_QUALTRICS_CLIENT_ID",
+    "directory_id": "XYG",
+    "clientSecret": "TAP_QUALTRICS_CLIENT_SECRET",
+    "scope": "SCOPE",
+    "grant_type": "grant_type",
+    "dataCenter": "datacenter"
+  },
+  "author": "Stitch",
+  "third_party_dependencies": [
+    "singer-python==6.1.1",
+    "requests==2.32.4",
+    "backoff==2.2.1"
+  ]
+}

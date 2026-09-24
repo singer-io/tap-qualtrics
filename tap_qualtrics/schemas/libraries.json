@@ -1,0 +1,17 @@
+{
+    "type": "object",
+    "properties": {
+        "libraryId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "libraryName": {
+            "type": [
+                "null",
+                "string"
+            ]
+        }
+    }
+}

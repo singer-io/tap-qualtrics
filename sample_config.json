@@ -1,0 +1,22 @@
+{
+    "client_id": "client_id",
+    "client_secret": "client_secret",
+    "scope": "scope",
+    "auth_method": "authorization_code",
+    "data_center": "cde",
+    "redirect_uri": "redirect_uri",
+    "refresh_token": "sometoken",
+    "access_token": "sometoken",
+    "start_date": "2026-06-01T00:00:00Z"
+}
+
+// use below for client_credentials grant type
+
+{
+    "client_id": "client_id",
+    "client_secret": "client_secret",
+    "scope": "scope",
+    "auth_method": "client_credentials",
+    "data_center": "data_center",
+    "start_date": "2020-07-01T00:00:00Z"
+}

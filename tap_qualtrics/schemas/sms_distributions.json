@@ -1,0 +1,171 @@
+{
+    "type": "object",
+    "properties": {
+        "survey_id": {
+            "type": ["null", "string"]
+        },
+        "id": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "ownerId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "organizationId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "requestStatus": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "requestType": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "sendDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "surveyId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "name": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "recipients": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "properties": {
+                "mailingListId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "contactId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "libraryId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "sampleId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "transactionId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "transactionBatchId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                }
+            }
+        },
+        "message": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "properties": {
+                "libraryId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "messageId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "messageType": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                }
+            }
+        },
+        "stats": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "properties": {
+                "sent": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "failed": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "started": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "finished": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "credits": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "segments": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                }
+            }
+        }
+    }
+}

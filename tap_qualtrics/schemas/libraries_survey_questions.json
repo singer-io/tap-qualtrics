@@ -1,0 +1,25 @@
+{
+    "type": "object",
+    "properties": {
+        "libraryId": {
+            "type": ["null", "string"]
+        },
+        "category": {
+            "type": ["null", "string"]
+        },
+        "questions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "question_id": {
+                        "type": ["null", "string"]
+                    },
+                    "question_value": {
+                        "type": ["null", "string"]
+                    }
+                }
+            }
+        }
+    }
+}

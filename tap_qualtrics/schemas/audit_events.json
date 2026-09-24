@@ -1,0 +1,224 @@
+{
+    "type": "object",
+    "properties": {
+        "activity_type": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "id": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "timestamp": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "datacenter": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "source": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "descriptor": {
+            "type": "object",
+            "properties": {
+                "userId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "username": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "brandId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "sessionId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "isSuccessful": {
+                    "type": [
+                        "null",
+                        "boolean"
+                    ]
+                },
+                "failureReason": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "isProxyLogin": {
+                    "type": [
+                        "null",
+                        "boolean"
+                    ]
+                },
+                "proxyDetails": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "product": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "url": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "ipAddress": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "location": {
+                    "type": "object",
+                    "properties": {
+                        "countryCode": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        },
+                        "region": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        },
+                        "city": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        },
+                        "postalCode": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        },
+                        "latitude": {
+                            "type": [
+                                "null",
+                                "number"
+                            ]
+                        },
+                        "longitude": {
+                            "type": [
+                                "null",
+                                "number"
+                            ]
+                        },
+                        "dmaCode": {
+                            "type": [
+                                "null",
+                                "integer"
+                            ]
+                        },
+                        "areaCode": {
+                            "type": [
+                                "null",
+                                "integer"
+                            ]
+                        },
+                        "metroCode": {
+                            "type": [
+                                "null",
+                                "integer"
+                            ]
+                        }
+                    }
+                },
+                "authentication": {
+                    "type": "object",
+                    "properties": {
+                        "method": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        },
+                        "methodVersion": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        },
+                        "secondFactor": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        }
+                    }
+                },
+                "platform": {
+                    "type": "object",
+                    "properties": {
+                        "userAgent": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        },
+                        "userAgentVersion": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        },
+                        "operatingSystem": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        },
+                        "operatingSystemVersion": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        },
+                        "deviceFamily": {
+                            "type": [
+                                "null",
+                                "string"
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

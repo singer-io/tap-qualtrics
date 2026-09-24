@@ -1,0 +1,85 @@
+{
+    "type": "object",
+    "properties": {
+        "sampleId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "contactId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "firstName": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "lastName": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "email": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "phone": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "extRef": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "language": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "unsubscribed": {
+            "type": [
+                "null",
+                "boolean"
+            ]
+        },
+        "mailingListUnsubscribed": {
+            "type": [
+                "null",
+                "boolean"
+            ]
+        },
+        "embeddedData": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "properties": {
+                "property1": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "property2": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                }
+            }
+        }
+    }
+}

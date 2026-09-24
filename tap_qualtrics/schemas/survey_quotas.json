@@ -1,0 +1,74 @@
+{
+    "type": "object",
+    "properties": {
+        "survey_id": {
+            "type": ["null", "string"]
+        },
+        "id": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "name": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "count": {
+            "type": [
+                "null",
+                "integer"
+            ]
+        },
+        "quota": {
+            "type": [
+                "null",
+                "integer"
+            ]
+        },
+        "logicType": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "combinations": {
+            "type": [
+                "null",
+                "array"
+            ],
+            "items": {
+                "type": [
+                    "null",
+                    "object"
+                ],
+                "properties": {
+                    "count": {
+                        "type": [
+                            "null",
+                            "integer"
+                        ]
+                    },
+                    "quota": {
+                        "type": [
+                            "null",
+                            "integer"
+                        ]
+                    },
+                    "description": {
+                        "type": [
+                            "null",
+                            "string"
+                        ]
+                    }
+                }
+            }
+        },
+        "lastModified": {
+            "type": ["null", "string"],
+            "format": "date-time"
+        }
+    }
+}
