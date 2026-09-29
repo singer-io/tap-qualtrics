@@ -1,5 +1,5 @@
 ﻿from singer import get_logger
-from tap_qualtrics.exceptions import QualtricsError, QualtricsInternalServerError
+from tap_qualtrics.exceptions import QualtricsInternalServerError
 from tap_qualtrics.streams.abstracts import ChildBaseStream
 
 LOGGER = get_logger()

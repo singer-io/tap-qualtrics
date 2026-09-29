@@ -148,8 +148,6 @@ class TestCheckAccess(unittest.TestCase):
 
     def _make_stream(self, parent=None, path="test_path"):
         from tap_qualtrics.streams.abstracts import FullTableStream
-        from typing import Any, Dict, Iterator
-        from singer import Transformer
 
         class ConcreteStream(FullTableStream):
             tap_stream_id = "test"

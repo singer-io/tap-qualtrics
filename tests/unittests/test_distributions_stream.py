@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 
 from tap_qualtrics.streams.distributions import Distributions
 from tap_qualtrics.streams.distribution_history import DistributionHistory
-from tap_qualtrics.streams.distribution_links import DistributionLinks
 
 
 def _make_client():

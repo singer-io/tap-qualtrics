@@ -23,6 +23,7 @@ from tap_qualtrics.exceptions import (
     QualtricsBackoffError,
     QualtricsBadRequestError,
     QualtricsError,
+    QualtricsForbiddenError,
 )
 from tap_qualtrics.streams.abstracts import IncrementalStream
 
@@ -66,7 +67,7 @@ class AuditExport(IncrementalStream):
 
         try:
             resp = client.get("audit-events")
-        except QualtricsError as exc:
+        except QualtricsForbiddenError as exc:
             LOGGER.warning("Cannot list audit event types during discovery: %s", exc)
             return [], []
         event_types = (resp.get("result") or {}).get("elements", [])

@@ -3,11 +3,10 @@ import io
 import json
 import zipfile
 import unittest
-from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 from tap_qualtrics.streams.audit_export import AuditExport
-from tap_qualtrics.exceptions import QualtricsBadRequestError, QualtricsBackoffError, QualtricsError
+from tap_qualtrics.exceptions import QualtricsBadRequestError, QualtricsError
 
 
 def _make_client():
@@ -247,11 +246,11 @@ class TestAuditExportDiscoverDynamicEntries(unittest.TestCase):
         entries, _ = AuditExport.discover_dynamic_entries(client)
         self.assertEqual(entries, [])
 
-    def test_get_error_returns_empty(self):
+    def test_get_error_propagates(self):
         client = _make_client()
         client.get.side_effect = QualtricsError("error")
-        entries, _ = AuditExport.discover_dynamic_entries(client)
-        self.assertEqual(entries, [])
+        with self.assertRaises(QualtricsError):
+            AuditExport.discover_dynamic_entries(client)
 
     def test_bad_request_event_type_is_skipped(self):
         client = _make_client()

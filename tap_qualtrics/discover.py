@@ -1,7 +1,7 @@
 import singer
 from singer import metadata
 from singer.catalog import Catalog, CatalogEntry, Schema
-from tap_qualtrics.exceptions import QualtricsForbiddenError, QualtricsError
+from tap_qualtrics.exceptions import QualtricsForbiddenError
 from tap_qualtrics.schema import get_schemas
 from tap_qualtrics.streams import STREAMS
 from tap_qualtrics.streams.audit_export import AuditExport
@@ -183,7 +183,7 @@ def _add_dynamic_entries(client, catalog: Catalog) -> list:
         try:
             entries, skipped = stream_cls.discover_dynamic_entries(client)
             all_skipped.extend(skipped)
-        except QualtricsError as exc:
+        except QualtricsForbiddenError as exc:
             LOGGER.warning(
                 "Skipping dynamic entries for '%s' during discovery: %s",
                 stream_cls.tap_stream_id,

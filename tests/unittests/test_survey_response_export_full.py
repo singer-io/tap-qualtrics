@@ -185,11 +185,11 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
         mock_executor.assert_called_once()
         executor.map.assert_called_once()
 
-    def test_get_error_returns_empty(self):
+    def test_get_error_propagates(self):
         client = _make_client()
         client.get.side_effect = QualtricsError("error")
-        entries, _ = SurveyResponseExport.discover_dynamic_entries(client)
-        self.assertEqual(entries, [])
+        with self.assertRaises(QualtricsError):
+            SurveyResponseExport.discover_dynamic_entries(client)
 
     def test_deduplicates_survey_jobs_within_discovery(self):
         client = _make_client()

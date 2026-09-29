@@ -16,7 +16,6 @@ from singer import get_logger, metrics
 
 from tap_qualtrics.exceptions import (ERROR_CODE_EXCEPTION_MAPPING,
                                       QualtricsBadGatewayError, QualtricsError,
-                                      QualtricsInternalServerError,
                                       QualtricsRateLimitError,
                                       QualtricsServiceUnavailableError,
                                       QualtricsUnauthorizedError)

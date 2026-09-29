@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 from tap_qualtrics.sync import (
     _has_selected_dynamic_entries,
     sync,
-    update_currently_syncing,
     write_schema,
 )
 

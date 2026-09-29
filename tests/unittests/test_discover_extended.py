@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 from tap_qualtrics.discover import (
     _apply_access_checks,
     _fetch_sample_record,
-    _prune_inaccessible_children,
     _topological_order,
     _add_dynamic_entries,
     discover,
@@ -226,7 +225,7 @@ class TestAddDynamicEntries(unittest.TestCase):
         stream_ids = [s.tap_stream_id for s in catalog.streams]
         self.assertIn("audit_export__login", stream_ids)
 
-    def test_qualtrics_error_skips_stream(self):
+    def test_qualtrics_error_propagates(self):
         from singer.catalog import Catalog
         catalog = Catalog([])
         client = MagicMock()
@@ -234,6 +233,22 @@ class TestAddDynamicEntries(unittest.TestCase):
         with patch("tap_qualtrics.discover.AuditExport") as MockAudit:
             MockAudit.tap_stream_id = "audit_export"
             MockAudit.discover_dynamic_entries.side_effect = QualtricsError("error")
+            with patch("tap_qualtrics.discover.SurveyResponseExport") as MockSurvey:
+                MockSurvey.tap_stream_id = "survey_response_export"
+                MockSurvey.discover_dynamic_entries.return_value = ([], [])
+                with self.assertRaises(QualtricsError):
+                    _add_dynamic_entries(client, catalog)
+
+        self.assertEqual(len(catalog.streams), 0)
+
+    def test_forbidden_dynamic_stream_is_skipped(self):
+        from singer.catalog import Catalog
+        catalog = Catalog([])
+        client = MagicMock()
+
+        with patch("tap_qualtrics.discover.AuditExport") as MockAudit:
+            MockAudit.tap_stream_id = "audit_export"
+            MockAudit.discover_dynamic_entries.side_effect = QualtricsForbiddenError("403")
             with patch("tap_qualtrics.discover.SurveyResponseExport") as MockSurvey:
                 MockSurvey.tap_stream_id = "survey_response_export"
                 MockSurvey.discover_dynamic_entries.return_value = ([], [])

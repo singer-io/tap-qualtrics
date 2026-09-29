@@ -1,9 +1,7 @@
 import unittest
 import base64
 from unittest.mock import patch, MagicMock
-from parameterized import parameterized
 import requests
-from requests.exceptions import Timeout, ConnectionError, ChunkedEncodingError
 from tap_qualtrics.client import Client
 from tap_qualtrics.exceptions import QualtricsError
 
@@ -267,7 +265,7 @@ class TestClientOAuth2TokenExpiration(unittest.TestCase):
     @patch("requests.Session.post")
     def test_token_expiration_with_buffer(self, mock_post):
         """Test that token expiration uses 60-second buffer."""
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timezone
 
         expires_in = 7200  # 2 hours
         expected_buffer = 60

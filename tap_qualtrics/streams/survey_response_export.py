@@ -15,7 +15,11 @@ from singer import (
 )
 
 from tap_qualtrics.client import Client
-from tap_qualtrics.exceptions import QualtricsBackoffError, QualtricsError
+from tap_qualtrics.exceptions import (
+    QualtricsBackoffError,
+    QualtricsError,
+    QualtricsForbiddenError,
+)
 from tap_qualtrics.streams.abstracts import IncrementalStream
 
 LOGGER = get_logger()
@@ -43,7 +47,7 @@ class SurveyResponseExport(IncrementalStream):
 
         try:
             surveys_resp = client.get("surveys")
-        except QualtricsError as exc:
+        except QualtricsForbiddenError as exc:
             LOGGER.warning("Cannot list surveys during discovery: %s", exc)
             return [], []
         surveys = (surveys_resp.get("result") or {}).get("elements", [])

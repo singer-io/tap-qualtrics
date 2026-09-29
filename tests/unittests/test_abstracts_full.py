@@ -116,6 +116,13 @@ class TestBaseStreamHelpers(unittest.TestCase):
         stream.client.get.side_effect = QualtricsForbiddenError("403")
         self.assertFalse(stream.check_access())
 
+    def test_check_access_unauthorized_returns_false(self):
+        from tap_qualtrics.exceptions import QualtricsUnauthorizedError
+
+        stream = self._stream()
+        stream.client.get.side_effect = QualtricsUnauthorizedError("401")
+        self.assertFalse(stream.check_access())
+
     def test_check_access_non_authorization_error_is_propagated(self):
         from tap_qualtrics.exceptions import (
             QualtricsBadRequestError,

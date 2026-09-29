@@ -13,10 +13,8 @@ from singer import (
 )
 
 from tap_qualtrics.exceptions import (
-    QualtricsError,
     QualtricsForbiddenError,
     QualtricsInternalServerError,
-    QualtricsNotFoundError,
     QualtricsUnauthorizedError,
 )
 
@@ -109,6 +107,8 @@ class BaseStream(ABC):
             LOGGER.warning("Stream '%s' is not accessible due to authorization restrictions.", self.tap_stream_id)
             return False
         except QualtricsUnauthorizedError:
+            # Some Qualtrics endpoints return 401 for endpoint-specific access;
+            # keep discovery running so accessible streams remain available.
             LOGGER.warning("Stream '%s' is not accessible due to invalid or expired credentials.", self.tap_stream_id)
             return False
 
@@ -147,7 +147,6 @@ class BaseStream(ABC):
                 response = self.client.get(path, full_url=next_url)
             else:
                 response = self.client.get(path, params=params)
-            # LOGGER.info("Paginating %s: %s", path, response.get("result", {}))
             records = _get_nested(response, self.data_key)
             if isinstance(records, list):
                 yield from records
