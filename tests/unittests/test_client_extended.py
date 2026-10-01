@@ -233,6 +233,32 @@ class TestMakeRequest429(unittest.TestCase):
                 c._make_request("GET", "https://iad1.qualtrics.com/API/v3/users")
 
 
+class TestMakeRequest500(unittest.TestCase):
+
+    @patch.object(Client, "_obtain_oauth_token")
+    @patch("time.sleep")
+    def test_500_retries_then_succeeds(self, mock_sleep, mock_oauth):
+        mock_oauth.return_value = None
+        c = Client(_OAUTH_CONFIG)
+        c.access_token = "tok"
+        error_response = MagicMock(status_code=500)
+        error_response.json.return_value = {}
+        success_response = MagicMock(status_code=200)
+        success_response.json.return_value = {"result": "ok"}
+
+        with patch.object(
+            c._session,
+            "request",
+            side_effect=[error_response, success_response],
+        ) as mock_request:
+            result = c._make_request(
+                "GET", "https://iad1.qualtrics.com/API/v3/users"
+            )
+
+        self.assertIs(result, success_response)
+        self.assertEqual(mock_request.call_count, 2)
+
+
 class TestWaitIfRetryAfter(unittest.TestCase):
 
     def test_uses_retry_after_header(self):
@@ -241,15 +267,24 @@ class TestWaitIfRetryAfter(unittest.TestCase):
         exc = QualtricsRateLimitError("rate limit", response=response)
         self.assertEqual(wait_if_retry_after({"exception": exc}), 12.0)
 
-    def test_invalid_retry_after_falls_back(self):
+    @patch("tap_qualtrics.client.random.randint", return_value=4)
+    def test_invalid_retry_after_falls_back(self, mock_randint):
         response = MagicMock()
         response.headers = {"Retry-After": "abc"}
         exc = QualtricsRateLimitError("rate limit", response=response)
-        self.assertEqual(wait_if_retry_after({"exception": exc}), 5.0)
+        self.assertEqual(wait_if_retry_after({"exception": exc}), 4)
+        mock_randint.assert_called_once_with(3, 7)
 
-    def test_missing_response_falls_back(self):
+    @patch("tap_qualtrics.client.random.randint", return_value=6)
+    def test_missing_response_falls_back(self, mock_randint):
         exc = QualtricsRateLimitError("rate limit")
-        self.assertEqual(wait_if_retry_after({"exception": exc}), 5.0)
+        self.assertEqual(wait_if_retry_after({"exception": exc}), 6)
+        mock_randint.assert_called_once_with(3, 7)
+
+    def test_fallback_within_range(self):
+        exc = QualtricsRateLimitError("rate limit")
+        for _ in range(50):
+            self.assertTrue(3 <= wait_if_retry_after(exc) <= 7)
 
 
 # ---------------------------------------------------------------------------

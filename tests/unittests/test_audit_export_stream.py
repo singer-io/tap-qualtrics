@@ -6,7 +6,11 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from tap_qualtrics.streams.audit_export import AuditExport
-from tap_qualtrics.exceptions import QualtricsBadRequestError, QualtricsError
+from tap_qualtrics.exceptions import (
+    QualtricsBadRequestError,
+    QualtricsError,
+    QualtricsUnprocessableEntityError,
+)
 
 
 def _make_client():
@@ -259,6 +263,17 @@ class TestAuditExportDiscoverDynamicEntries(unittest.TestCase):
         entries, skipped = AuditExport.discover_dynamic_entries(client)
         self.assertEqual(entries, [])
         self.assertEqual(skipped, ["login"])
+
+    def test_unprocessable_event_type_is_not_retried(self):
+        client = _make_client()
+        client.get.return_value = {"result": {"elements": [{"name": "login"}]}}
+        client.post.side_effect = QualtricsUnprocessableEntityError("unprocessable")
+
+        entries, skipped = AuditExport.discover_dynamic_entries(client)
+
+        self.assertEqual(entries, [])
+        self.assertEqual(skipped, ["login"])
+        self.assertEqual(client.post.call_count, 1)
 
     def test_deduplicates_event_jobs_within_discovery(self):
         client = _make_client()

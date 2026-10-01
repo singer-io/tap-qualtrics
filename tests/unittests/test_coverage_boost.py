@@ -7,8 +7,13 @@ from singer import metadata
 from singer.catalog import Catalog
 
 import tap_qualtrics
+from tap_qualtrics.client import Client
 from tap_qualtrics.discover import _add_dynamic_entries, discover
-from tap_qualtrics.exceptions import QualtricsError, QualtricsInternalServerError
+from tap_qualtrics.exceptions import (
+    QualtricsError,
+    QualtricsForbiddenError,
+    QualtricsInternalServerError,
+)
 from tap_qualtrics.streams.abstracts import (
     ChildBaseStream,
     IncrementalMailingListChildStream,
@@ -17,6 +22,7 @@ from tap_qualtrics.streams.abstracts import (
     IncrementalSurveyChildStream,
 )
 from tap_qualtrics.streams.audit_events import AuditEvents
+from tap_qualtrics.streams.audit_export import AuditExport
 from tap_qualtrics.streams.distribution_history import DistributionHistory
 from tap_qualtrics.streams.distribution_links import DistributionLinks
 from tap_qualtrics.streams.distributions import Distributions
@@ -26,6 +32,7 @@ from tap_qualtrics.streams.segments import Segments
 from tap_qualtrics.streams.sms_distributions import SmsDistributions
 from tap_qualtrics.streams.survey import Survey
 from tap_qualtrics.streams.survey_response_export import SurveyResponseExport
+from tap_qualtrics.streams.whatsapp_distributions import WhatsappDistributions
 from tap_qualtrics.sync import sync
 
 
@@ -630,6 +637,136 @@ class TestDiscoverAndSyncGapBranches(unittest.TestCase):
 
         self.assertEqual(count, 0)
         self.assertTrue(mock_logger.warning.called)
+
+
+class TestWhatsappDistributions(unittest.TestCase):
+
+    def _stream(self):
+        return WhatsappDistributions(client=_make_client(), catalog_entry=_make_entry())
+
+    def test_get_records_without_survey_yields_nothing(self):
+        stream = self._stream()
+        with patch.object(stream, "_paginate") as mock_paginate:
+            self.assertEqual(list(stream.get_records(None)), [])
+        mock_paginate.assert_not_called()
+
+    def test_get_records_adds_survey_id_and_start_date(self):
+        stream = self._stream()
+        with patch.object(stream, "_paginate", return_value=iter([{"id": "W1"}])) as mock_paginate:
+            records = list(stream.get_records({"id": "SV_1"}, "2024-01-01T00:00:00Z"))
+
+        self.assertEqual(records, [{"id": "W1", "survey_id": "SV_1"}])
+        mock_paginate.assert_called_once_with(
+            "distributions/whatsapp",
+            {"surveyId": "SV_1", "pageSize": 100, "startDate": "2024-01-01T00:00:00Z"},
+        )
+
+    def test_get_records_omits_start_date_without_bookmark(self):
+        stream = self._stream()
+        with patch.object(stream, "_paginate", return_value=iter([])) as mock_paginate:
+            list(stream.get_records({"id": "SV_2"}))
+        mock_paginate.assert_called_once_with(
+            "distributions/whatsapp", {"surveyId": "SV_2", "pageSize": 100}
+        )
+
+    def test_sync_passes_bookmark_to_get_records(self):
+        stream = self._stream()
+        transformer = MagicMock()
+        transformer.transform.side_effect = lambda record, *_: record
+        records = [{"id": "W1", "sendDate": "2024-02-01T00:00:00Z"}]
+        with patch.object(stream, "_paginate", return_value=iter(records)):
+            count = stream.sync(state={}, transformer=transformer, parent_id={"id": "SV_1"})
+        self.assertEqual(count, 1)
+
+    def test_make_probe_path(self):
+        stream = self._stream()
+        self.assertEqual(
+            stream._make_probe_path({"id": "SV_1"}),
+            "distributions/whatsapp?surveyId=SV_1",
+        )
+        self.assertEqual(stream._make_probe_path({}), "")
+
+
+class TestDistributionLinksCheckAccess(unittest.TestCase):
+
+    def _stream(self):
+        return DistributionLinks(client=_make_client(), catalog_entry=_make_entry())
+
+    def test_no_parent_returns_true_without_probe(self):
+        stream = self._stream()
+        self.assertTrue(stream.check_access(None))
+        stream.client.get.assert_not_called()
+
+    def test_probe_uses_parent_survey_id(self):
+        stream = self._stream()
+        self.assertTrue(stream.check_access({"id": "D_1", "survey_id": "SV_1"}))
+        stream.client.get.assert_called_once_with(
+            "distributions/D_1/links", params={"pageSize": 1, "surveyId": "SV_1"}
+        )
+
+    def test_probe_falls_back_to_cached_survey_id(self):
+        stream = self._stream()
+        stream._survey_id = "SV_9"
+        stream.check_access({"id": "D_1"})
+        stream.client.get.assert_called_once_with(
+            "distributions/D_1/links", params={"pageSize": 1, "surveyId": "SV_9"}
+        )
+
+    def test_probe_without_survey_id(self):
+        stream = self._stream()
+        stream.check_access({"id": "D_1"})
+        stream.client.get.assert_called_once_with(
+            "distributions/D_1/links", params={"pageSize": 1}
+        )
+
+    @patch("tap_qualtrics.streams.distribution_links.LOGGER")
+    def test_probe_500_is_warning_only(self, mock_logger):
+        stream = self._stream()
+        stream.client.get.side_effect = QualtricsInternalServerError("500")
+        self.assertTrue(stream.check_access({"id": "D_1", "survey_id": "SV_1"}))
+        mock_logger.warning.assert_called_once()
+
+
+class TestDynamicDiscoveryClientBranches(unittest.TestCase):
+
+    def _real_client_mock(self, list_response):
+        client = MagicMock(spec=Client)
+        client.start_date = "2020-01-01T00:00:00Z"
+        client.get.return_value = list_response
+        worker = MagicMock()
+        worker.post.return_value = {"result": {}}
+        client.fork.return_value = worker
+        return client, worker
+
+    def test_audit_export_forks_worker_client(self):
+        client, worker = self._real_client_mock({"result": {"elements": [{"name": "login"}]}})
+        entries, skipped = AuditExport.discover_dynamic_entries(client)
+        self.assertEqual(entries, [])
+        self.assertEqual(skipped, ["login"])
+        client.fork.assert_called_once()
+        worker.post.assert_called_once()
+
+    @patch("tap_qualtrics.streams.audit_export.LOGGER")
+    def test_audit_export_forbidden_returns_empty(self, mock_logger):
+        client = _make_client()
+        client.get.side_effect = QualtricsForbiddenError("403")
+        self.assertEqual(AuditExport.discover_dynamic_entries(client), ([], []))
+        mock_logger.warning.assert_called_once()
+
+    def test_survey_response_export_forks_worker_client(self):
+        client, worker = self._real_client_mock({"result": {"elements": [{"id": "SV_1"}]}})
+        entries, skipped = SurveyResponseExport.discover_dynamic_entries(client)
+        self.assertEqual(entries, [])
+        self.assertEqual(skipped, ["SV_1"])
+        client.fork.assert_called_once()
+        worker.post.assert_called_once()
+
+    @patch("tap_qualtrics.streams.survey_response_export.LOGGER")
+    def test_survey_response_export_forbidden_returns_empty(self, mock_logger):
+        client = _make_client()
+        client.get.side_effect = QualtricsForbiddenError("403")
+        self.assertEqual(SurveyResponseExport.discover_dynamic_entries(client), ([], []))
+        mock_logger.warning.assert_called_once()
 
 
 if __name__ == "__main__":

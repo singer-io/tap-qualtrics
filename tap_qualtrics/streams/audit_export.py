@@ -24,6 +24,10 @@ from tap_qualtrics.exceptions import (
     QualtricsBadRequestError,
     QualtricsError,
     QualtricsForbiddenError,
+    QualtricsBadGatewayError,
+    QualtricsInternalServerError,
+    QualtricsRateLimitError,
+    QualtricsServiceUnavailableError,
 )
 from tap_qualtrics.streams.abstracts import IncrementalStream
 
@@ -89,7 +93,12 @@ class AuditExport(IncrementalStream):
         # Worker concurrency is capped and local schema inference uses a bounded sample.
         @backoff.on_exception(
             backoff.expo,
-            QualtricsBackoffError,
+            (
+                QualtricsRateLimitError,
+                QualtricsInternalServerError,
+                QualtricsBadGatewayError,
+                QualtricsServiceUnavailableError,
+            ),
             max_tries=5,
             jitter=backoff.full_jitter,
         )

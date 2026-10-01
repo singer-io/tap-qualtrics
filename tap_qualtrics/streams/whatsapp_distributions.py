@@ -11,12 +11,14 @@ class WhatsappDistributions(IncrementalStream):
     page_size = 100
     parent = "surveys"
 
-    def get_records(self, parent_id=None):
+    def get_records(self, parent_id=None, bookmark=""):
         """Yield WhatsApp distributions belonging to one survey."""
         survey_id = (parent_id or {}).get("id") or parent_id
         if not survey_id:
             return
         params = {"surveyId": survey_id, "pageSize": self.page_size}
+        if bookmark:
+            params["startDate"] = bookmark
         for record in self._paginate(self.path, params):
             record["survey_id"] = survey_id
             yield record

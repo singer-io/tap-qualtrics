@@ -1,5 +1,6 @@
 import base64
 import json
+import random
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -16,6 +17,7 @@ from singer import get_logger, metrics
 
 from tap_qualtrics.exceptions import (ERROR_CODE_EXCEPTION_MAPPING,
                                       QualtricsBadGatewayError, QualtricsError,
+                                      QualtricsInternalServerError,
                                       QualtricsRateLimitError,
                                       QualtricsServiceUnavailableError,
                                       QualtricsUnauthorizedError)
@@ -25,13 +27,13 @@ REQUEST_TIMEOUT = 300
 MAX_POLL_ATTEMPTS = 60
 POLL_INTERVAL = 5  # seconds between status checks
 QUALTRICS_SCOPE = (
-    "manage:activity_logs read:activity_logs "
+    "read:activity_logs "
     "read:contact_frequency_rules read:contact_transactions read:directories "
     "read:directory_contacts read:distributions read:divisions read:groups "
     "read:libraries read:mailing_list_contacts read:mailing_lists "
     "read:organizations read:subscriptions read:survey_responses read:surveys "
     "read:users read:tickets read:samples "
-    "read:directory_segments manage:erasure_requests manage:contact_transactions manage:directory_contacts"
+    "read:directory_segments read:contact_transactions manage:erasure_requests"
 )
 
 
@@ -64,8 +66,7 @@ def wait_if_retry_after(details_or_exception) -> float:
             except (TypeError, ValueError):
                 pass
 
-    # Fallback when header is absent or invalid.
-    return 5.0
+    return random.randint(3, 7)
 
 
 def raise_for_error(response: requests.Response) -> None:
@@ -332,6 +333,7 @@ class Client:  # pylint: disable=too-many-instance-attributes
             RequestsConnectionError,
             ChunkedEncodingError,
             Timeout,
+            QualtricsInternalServerError,
             QualtricsServiceUnavailableError,
             QualtricsBadGatewayError,
         ),

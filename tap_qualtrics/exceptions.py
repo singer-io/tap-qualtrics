@@ -26,7 +26,7 @@ class QualtricsNotFoundError(QualtricsError):
 class QualtricsConflictError(QualtricsError):
     """class representing 409 status code."""
 
-class QualtricsUnprocessableEntityError(QualtricsBackoffError):
+class QualtricsUnprocessableEntityError(QualtricsError):
     """class representing 422 status code."""
 
 class QualtricsRateLimitError(QualtricsBackoffError):
