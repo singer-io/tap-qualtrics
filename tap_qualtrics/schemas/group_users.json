@@ -1,0 +1,59 @@
+{
+    "type": "object",
+    "properties": {
+        "groupId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "id": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "divisionId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "username": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "firstName": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "lastName": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "userType": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "email": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "accountStatus": {
+            "type": [
+                "null",
+                "string"
+            ]
+        }
+    }
+}

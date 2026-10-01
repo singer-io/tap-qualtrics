@@ -1,0 +1,25 @@
+{
+    "type": "object",
+    "properties": {
+        "libraryId": {
+            "type": ["null", "string"]
+        },
+        "category": {
+            "type": ["null", "string"]
+        },
+        "surveys": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "survey_id": {
+                        "type": ["null", "string"]
+                    },
+                    "survey_value": {
+                        "type": ["null", "string"]
+                    }
+                }
+            }
+        }
+    }
+}
