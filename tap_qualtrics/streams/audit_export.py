@@ -20,7 +20,6 @@ from singer import (
 
 from tap_qualtrics.client import Client
 from tap_qualtrics.exceptions import (
-    QualtricsBackoffError,
     QualtricsBadRequestError,
     QualtricsError,
     QualtricsForbiddenError,
@@ -132,7 +131,7 @@ class AuditExport(IncrementalStream):
         def _discover_event(event_name):
             try:
                 records = _fetch_records(_worker_client(), event_name)
-            except QualtricsBackoffError:
+            except QualtricsRateLimitError:
                 return (event_name, "rate_limited", None)
             except QualtricsError as exc:
                 return (event_name, "error", exc)

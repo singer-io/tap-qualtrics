@@ -17,6 +17,7 @@ from singer import (
 from tap_qualtrics.client import Client
 from tap_qualtrics.exceptions import (
     QualtricsBackoffError,
+    QualtricsRateLimitError,
     QualtricsError,
     QualtricsForbiddenError,
 )
@@ -97,7 +98,7 @@ class SurveyResponseExport(IncrementalStream):
         def _discover_survey(survey_id):
             try:
                 records = _fetch_records(_worker_client(), survey_id)
-            except QualtricsBackoffError:
+            except QualtricsRateLimitError:
                 return (survey_id, "rate_limited", None)
             except QualtricsError as exc:
                 return (survey_id, "error", exc)

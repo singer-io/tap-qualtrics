@@ -26,6 +26,7 @@ LOGGER = get_logger()
 REQUEST_TIMEOUT = 300
 MAX_POLL_ATTEMPTS = 60
 POLL_INTERVAL = 5  # seconds between status checks
+# Reference for qualtrics scopes https://api.qualtrics.com/1450e85735dbf-o-auth-2-0-scopes
 QUALTRICS_SCOPE = (
     "read:activity_logs "
     "read:contact_frequency_rules read:contact_transactions read:directories "

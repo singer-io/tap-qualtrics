@@ -35,10 +35,10 @@ class QualtricsRateLimitError(QualtricsBackoffError):
 class QualtricsInternalServerError(QualtricsBackoffError):
     """class representing 500 status code."""
 
-class QualtricsNotImplementedError(QualtricsBackoffError):
+class QualtricsNotImplementedError(QualtricsError):
     """class representing 501 status code."""
 
-class QualtricsBadGatewayError(QualtricsBackoffError):
+class QualtricsBadGatewayError(QualtricsError):
     """class representing 502 status code."""
 
 class QualtricsServiceUnavailableError(QualtricsBackoffError):
