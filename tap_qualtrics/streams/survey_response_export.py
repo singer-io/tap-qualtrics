@@ -17,6 +17,7 @@ from singer import (
 from tap_qualtrics.client import Client
 from tap_qualtrics.exceptions import (
     QualtricsBackoffError,
+    QualtricsBadGatewayError,
     QualtricsRateLimitError,
     QualtricsError,
     QualtricsForbiddenError,
@@ -67,7 +68,7 @@ class SurveyResponseExport(IncrementalStream):
         # The probe is bounded to a small sample and worker concurrency is capped.
         @backoff.on_exception(
             backoff.expo,
-            QualtricsBackoffError,
+            (QualtricsBackoffError, QualtricsBadGatewayError),
             max_tries=5,
             jitter=backoff.full_jitter,
         )

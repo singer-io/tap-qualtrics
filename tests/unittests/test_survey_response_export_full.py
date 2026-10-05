@@ -4,7 +4,11 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from tap_qualtrics.streams.survey_response_export import SurveyResponseExport
-from tap_qualtrics.exceptions import QualtricsBackoffError, QualtricsError
+from tap_qualtrics.exceptions import (
+    QualtricsBackoffError,
+    QualtricsBadGatewayError,
+    QualtricsError,
+)
 
 
 def _make_client():
@@ -222,6 +226,28 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
         SurveyResponseExport.discover_dynamic_entries(client)
 
         self.assertEqual(mock_executor.call_args.kwargs["max_workers"], 4)
+
+    @patch("time.sleep")
+    def test_discovery_retries_502_then_succeeds(self, mock_sleep):
+        client = _make_client()
+        client.get.return_value = {"result": {"elements": [{"id": "SV_1"}]}}
+        client.post.side_effect = [
+            QualtricsBadGatewayError("502 after client retries"),
+            {"result": {"progressId": "pid1"}},
+        ]
+        client.poll_export.return_value = {"result": {"status": "complete", "fileId": "fid1"}}
+        file_resp = MagicMock()
+        file_resp.content = json.dumps({
+            "responses": [{"responseId": "R_1", "values": {"recordedDate": "2021-01-01"}}]
+        }).encode()
+        client.get_file.return_value = file_resp
+
+        entries, skipped = SurveyResponseExport.discover_dynamic_entries(client)
+
+        self.assertEqual(client.post.call_count, 2)
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0][0], "survey_response_export__SV_1")
+        self.assertEqual(skipped, [])
 
     def test_qualtrics_error_is_skipped(self):
         client = _make_client()
