@@ -1,0 +1,41 @@
+{
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "scope": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "topics": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "publicationUrl": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "encrypted": {
+            "type": [
+                "null",
+                "boolean"
+            ]
+        },
+        "successfulCalls": {
+            "type": [
+                "null",
+                "integer"
+            ]
+        }
+    }
+}

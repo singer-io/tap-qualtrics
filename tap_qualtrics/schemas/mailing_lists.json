@@ -1,0 +1,49 @@
+{
+    "type": "object",
+    "properties": {
+        "directoryId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "contactCount": {
+            "type": [
+                "null",
+                "integer"
+            ]
+        },
+        "mailingListId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "name": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "lastModifiedDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "creationDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "ownerId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        }
+    }
+}

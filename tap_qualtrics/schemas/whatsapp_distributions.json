@@ -1,0 +1,138 @@
+{
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "name": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "ownerId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "organizationId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "requestStatus": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "requestType": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "sendDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "surveyId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "recipients": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "properties": {
+                "mailingListId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "contactId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                }
+            }
+        },
+        "message": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "properties": {
+                "messageId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "libraryId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                }
+            }
+        },
+        "stats": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "properties": {
+                "sent": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "started": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "finished": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "failed": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "credits": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "segments": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,24 @@
+{
+    "type": "object",
+    "properties": {
+        "directoryId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "batchId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "creationDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        }
+    }
+}

@@ -1,0 +1,44 @@
+{
+    "type": "object",
+    "properties": {
+        "ownerId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "eventType": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "createdAt": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "eventDetails": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "properties": {
+                "oldStatusId": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "newStatusId": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                }
+            }
+        }
+    }
+}

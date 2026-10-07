@@ -1,0 +1,247 @@
+{
+    "type": "object",
+    "properties": {
+        "survey_id": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "id": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "parentDistributionId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "ownerId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "organizationId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "requestStatus": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "requestType": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "sendDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "createdDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "modifiedDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "headers": {
+            "type": "object",
+            "properties": {
+                "fromEmail": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "replyToEmail": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "fromName": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "subject": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                }
+            }
+        },
+        "recipients": {
+            "type": "object",
+            "properties": {
+                "mailingListId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "contactId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "libraryId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "sampleId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                }
+            }
+        },
+        "message": {
+            "type": "object",
+            "properties": {
+                "libraryId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "messageId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "messageText": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "messageType": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                }
+            }
+        },
+        "surveyLink": {
+            "type": "object",
+            "properties": {
+                "surveyId": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                },
+                "expirationDate": {
+                    "type": [
+                        "null",
+                        "string"
+                    ],
+                    "format": "date-time"
+                },
+                "linkType": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                }
+            }
+        },
+        "stats": {
+            "type": "object",
+            "properties": {
+                "sent": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "failed": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "started": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "bounced": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "opened": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "skipped": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "finished": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "complaints": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "blocked": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                }
+            }
+        },
+        "embeddedData": {
+            "type": "object",
+            "additionalProperties": {
+                "type": [
+                    "null",
+                    "string"
+                ]
+            }
+        }
+    }
+}

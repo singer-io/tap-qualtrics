@@ -1,0 +1,83 @@
+{
+    "type": "object",
+    "properties": {
+        "segmentId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "contactId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "firstName": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "lastName": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "email": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "phone": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "extRef": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "language": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "directoryUnsubscribed": {
+            "type": [
+                "null",
+                "boolean"
+            ]
+        },
+        "directoryUnsubscribeDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "segmentUnsubscribed": {
+            "type": [
+                "null",
+                "boolean"
+            ]
+        },
+        "segmentUnsubscribeDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "lastModifiedDate": {
+            "type": ["null", "string"],
+            "format": "date-time"
+        }
+    }
+}

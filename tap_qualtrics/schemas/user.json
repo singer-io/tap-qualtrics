@@ -1,0 +1,145 @@
+{
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "username": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "email": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "firstName": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "lastName": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "userType": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "organizationId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "divisionId": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "language": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "accountStatus": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "unsubscribed": {
+            "type": [
+                "null",
+                "boolean"
+            ]
+        },
+        "accountCreationDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "accountExpirationDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "passwordLastChangedDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "passwordExpirationDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "lastLoginDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "timeZone": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "responseCounts": {
+            "type": "object",
+            "properties": {
+                "auditable": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "generated": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                },
+                "deleted": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                }
+            }
+        },
+        "permissions": {
+            "type": "object",
+            "properties": {}
+        },
+        "identityProvider": {
+            "type": [
+                "null",
+                "string"
+            ]
+        }
+    }
+}
