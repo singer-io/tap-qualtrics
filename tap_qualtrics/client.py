@@ -34,7 +34,7 @@ QUALTRICS_SCOPE = (
     "read:libraries read:mailing_list_contacts read:mailing_lists "
     "read:organizations read:subscriptions read:survey_responses read:surveys "
     "read:users read:tickets read:samples "
-    "read:directory_segments read:contact_transactions manage:erasure_requests"
+    "read:directory_segments manage:erasure_requests"
 )
 
 
