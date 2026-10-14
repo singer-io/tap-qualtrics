@@ -235,7 +235,10 @@
             }
         },
         "embeddedData": {
-            "type": "object",
+            "type": [
+                "null",
+                "object"
+            ],
             "additionalProperties": {
                 "type": [
                     "null",
