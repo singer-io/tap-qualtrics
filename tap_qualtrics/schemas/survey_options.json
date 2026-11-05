@@ -1,0 +1,18 @@
+{
+    "type": "object",
+    "properties": {
+        "lastModified": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "survey_id": {
+            "type": "string"
+        },
+        "options": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true,
+            "description": "Survey-specific options, preserving all keys and native JSON values."
+        }
+    }
+}

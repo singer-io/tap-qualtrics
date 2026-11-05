@@ -1,0 +1,66 @@
+{
+    "type": "object",
+    "properties": {
+        "lastModified": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "surveyID": {
+            "type": "string"
+        },
+        "versionID": {
+            "type": "string"
+        },
+        "versionNumber": {
+            "type": [
+                "null",
+                "integer"
+            ]
+        },
+        "description": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "userID": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "creationDate": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "published": {
+            "type": [
+                "null",
+                "boolean"
+            ]
+        },
+        "wasPublished": {
+            "type": [
+                "null",
+                "boolean"
+            ]
+        },
+        "publishEvents": {
+            "type": [
+                "null",
+                "array",
+                "object"
+            ],
+            "properties": {},
+            "additionalProperties": true,
+            "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+            }
+        }
+    }
+}

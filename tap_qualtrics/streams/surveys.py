@@ -12,6 +12,9 @@ class Surveys(IncrementalStream):
     children = [
         "survey",
         "survey_quotas",
+        "survey_versions",
+        "survey_options",
+        "survey_languages",
         "sms_distributions",
         "whatsapp_distributions",
         "survey_response_export",

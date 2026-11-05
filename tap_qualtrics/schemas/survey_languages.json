@@ -1,0 +1,15 @@
+{
+    "type": "object",
+    "properties": {
+        "lastModified": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "survey_id": {
+            "type": "string"
+        },
+        "language_code": {
+            "type": "string"
+        }
+    }
+}

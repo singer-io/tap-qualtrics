@@ -37,6 +37,10 @@ from tap_qualtrics.streams.transaction_batches import TransactionBatches
 from tap_qualtrics.streams.surveys import Surveys
 from tap_qualtrics.streams.survey import Survey
 from tap_qualtrics.streams.survey_quotas import SurveyQuotas
+from tap_qualtrics.streams.survey_versions import SurveyVersions
+from tap_qualtrics.streams.survey_options import SurveyOptions
+from tap_qualtrics.streams.survey_languages import SurveyLanguages
+from tap_qualtrics.streams.survey_translations import SurveyTranslations
 from tap_qualtrics.streams.survey_response_export import SurveyResponseExport
 
 from tap_qualtrics.streams.distributions import Distributions
@@ -95,6 +99,10 @@ STREAMS = {
     "surveys": Surveys,
     "survey": Survey,
     "survey_quotas": SurveyQuotas,
+    "survey_versions": SurveyVersions,
+    "survey_options": SurveyOptions,
+    "survey_languages": SurveyLanguages,
+    "survey_translations": SurveyTranslations,
     "survey_response_export": SurveyResponseExport,
     # Distributions
     "distributions": Distributions,

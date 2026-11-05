@@ -68,6 +68,13 @@ def sync(
 ) -> None:  # pylint: disable=unused-argument
     _ = config
     streams_to_sync = [s.stream for s in catalog.get_selected_streams(state)]
+    # Resolve every ancestor before building the tree, regardless of catalog order.
+    for stream_name in streams_to_sync:
+        base_name = stream_name.split("__")[0]
+        stream_cls = STREAMS.get(base_name)
+        parent_name = getattr(stream_cls, "parent", None)
+        if isinstance(parent_name, str) and parent_name not in streams_to_sync:
+            streams_to_sync.append(parent_name)
     LOGGER.info("Selected streams: %s", streams_to_sync)
 
     last_stream = singer.get_currently_syncing(state)
@@ -76,13 +83,8 @@ def sync(
     with singer.Transformer() as transformer:
         for stream_name in streams_to_sync:
             if stream_name not in STREAMS:
-                # Dynamic stream name (e.g. audit_export__login) — ensure its parent is queued.
                 base_name = stream_name.split("__")[0] if "__" in stream_name else None
-                if base_name and base_name in STREAMS:
-                    parent_name = STREAMS[base_name].parent
-                    if parent_name and parent_name not in streams_to_sync:
-                        streams_to_sync.append(parent_name)
-                else:
+                if not base_name or base_name not in STREAMS:
                     LOGGER.warning(
                         "Stream %s not in STREAMS registry - skipping",
                         stream_name,
@@ -95,9 +97,7 @@ def sync(
             )
 
             if stream.parent:
-                # Auto-add parent so it drives this child; child is synced via parent
-                if stream.parent not in streams_to_sync:
-                    streams_to_sync.append(stream.parent)
+                # Ancestors drive their children through the tree built by write_schema.
                 continue
 
             write_schema(stream, client, streams_to_sync, catalog)

@@ -6,7 +6,7 @@ following the [Singer spec](https://github.com/singer-io/getting-started/blob/ma
 This tap:
 
 - Pulls raw data from the [Qualtrics API](https://api.qualtrics.com).
-- Extracts the following resources (45 streams across 11 groups):
+- Extracts the following resources (48 streams across 11 groups):
   - Users, Groups, Audit, Libraries, Directories, Mailing Lists, Segments, Samples, Surveys, Distributions, Tickets
 - Outputs the schema for each resource
 - Incrementally pulls data based on the input state
@@ -162,6 +162,46 @@ This tap:
 - Primary keys: `responseId`
 - Replication strategy: INCREMENTAL
 - Replication key: `recordedDate`
+
+**survey_versions** *(child of surveys)*
+- Endpoint: `GET /survey-definitions/{surveyId}/versions`
+- Primary keys: `surveyID`, `versionID`
+- Replication strategy: INCREMENTAL
+- Replication key: `lastModified` (inherited from the parent survey)
+- Version fields are flattened from each element's `metadata`; `creationDate` is a date-time.
+
+**survey_options** *(child of surveys)*
+- Endpoint: `GET /survey-definitions/{surveyId}/options`
+- Primary key: `survey_id`
+- Replication strategy: INCREMENTAL
+- Replication key: `lastModified` (inherited from the parent survey)
+- One row per survey with the complete response in `options`, a nested object preserving
+  survey-specific keys and native JSON values, including nulls and nested objects.
+
+**survey_languages** *(child of surveys)*
+- Endpoint: `GET /surveys/{surveyId}/languages`
+- Primary keys: `survey_id`, `language_code`
+- Replication strategy: INCREMENTAL
+- Replication key: `lastModified` (inherited from the parent survey)
+- One row per code in `result.AvailableLanguages`.
+
+**survey_translations** *(child of survey_languages)*
+- Endpoint: `GET /surveys/{surveyId}/translations/{languageCode}`
+- Primary keys: `survey_id`, `language_code`, `element_id`
+- Replication strategy: INCREMENTAL
+- Replication key: `lastModified` (passed through survey_languages from the survey)
+- One row per translation element, with its text in `value`.
+- Selecting translations automatically traverses surveys and languages, even when those
+  streams are not selected for output.
+
+These four streams follow the surveys bookmark and only fetch surveys that pass the
+parent's incremental filter. Each record carries the survey's `lastModified`, and each
+stream maintains its own bookmark using the existing child-stream implementation.
+Changes are detected through the parent survey's modification timestamp, not separate
+timestamps supplied by these endpoints.
+Re-run discovery to refresh replication metadata. When adding these streams to a pipeline
+with an existing surveys bookmark, reset that bookmark or run a separate initial sync
+to backfill older surveys.
 
 ### Dynamic Export Discovery
 
