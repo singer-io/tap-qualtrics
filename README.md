@@ -200,8 +200,10 @@ stream maintains its own bookmark using the existing child-stream implementation
 Changes are detected through the parent survey's modification timestamp, not separate
 timestamps supplied by these endpoints.
 Re-run discovery to refresh replication metadata. When adding these streams to a pipeline
-with an existing surveys bookmark, reset that bookmark or run a separate initial sync
-to backfill older surveys.
+with existing bookmarks, clear the bookmarks for the streams being backfilled and all
+their ancestors, or run a separate initial sync with fresh state to backfill older surveys.
+For translations, clear `survey_translations`, `survey_languages`, and `surveys` bookmarks.
+Set `start_date` early enough to include the surveys being backfilled.
 
 ### Dynamic Export Discovery
 

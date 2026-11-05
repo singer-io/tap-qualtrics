@@ -1,7 +1,7 @@
 # Changelog
 
-## 0.0.3
-  * Add incremental survey versions, options, languages and translations streams.
+## 1.0.0
+  * Add incremental survey versions, options, languages and translations streams.[#4](https://github.com/singer-io/tap-qualtrics/pull/4)
 
 ## 0.0.2
   * Allow null `embeddedData` values in the distributions schema.
