@@ -225,6 +225,13 @@ This is required for dynamic polling APIs where the schema is only known after d
 
 ## Limitations
 
+- Request safety
+    - `data_center` must be a single DNS label such as `sjc1`, not a hostname or URL.
+    - Authenticated API, pagination, and download URLs must use HTTPS on the configured
+      `<data_center>.qualtrics.com` origin (default port or port 443).
+    - OAuth and API redirects are rejected rather than followed. Repeated pagination
+      URLs fail the sync explicitly instead of looping indefinitely.
+
 - Discovery-side impact
     - Each discovery run creates real export jobs against Qualtrics, consuming API quota, creating account-side artifacts, and adding latency.
     - The tap limits this impact by using small sample exports where supported, capping worker concurrency, and deduplicating parent resources so the same survey or event type does not spawn duplicate jobs in one run.
