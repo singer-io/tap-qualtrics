@@ -13,6 +13,7 @@ from singer import (
 )
 
 from tap_qualtrics.exceptions import (
+    QualtricsError,
     QualtricsForbiddenError,
     QualtricsInternalServerError,
     QualtricsUnauthorizedError,
@@ -141,6 +142,7 @@ class BaseStream(ABC):
         params = dict(params or {})
         params.setdefault("pageSize", self.page_size)
         next_url: Optional[str] = None
+        visited_urls = set()
 
         while True:
             if next_url:
@@ -156,6 +158,11 @@ class BaseStream(ABC):
             next_url = _get_nested(response, self.next_page_key)
             if not next_url:
                 break
+            if not isinstance(next_url, str) or next_url in visited_urls:
+                raise QualtricsError(
+                    f"Invalid or repeated pagination URL for stream '{self.tap_stream_id}'."
+                )
+            visited_urls.add(next_url)
 
 
 class FullTableStream(BaseStream):
