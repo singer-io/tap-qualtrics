@@ -47,12 +47,48 @@ class SurveyResponseExport(IncrementalStream):
                 return client.fork()
             return client
 
-        try:
-            surveys_resp = client.get("surveys")
-        except QualtricsForbiddenError as exc:
-            LOGGER.warning("Cannot list surveys during discovery: %s", exc)
-            return [], []
-        surveys = (surveys_resp.get("result") or {}).get("elements", [])
+        # GET /surveys is paginated (result.nextPage); discovery must walk every page the
+        # same way the `surveys` stream itself does (see Surveys/BaseStream._paginate), or
+        # any survey past the first page is silently never considered for a response export
+        # dataset - with no log line distinguishing it from a survey skipped on purpose.
+        page_size = getattr(client, "page_size", 100)
+        max_pages = 1000  # safety bound; a real account will never approach this
+        surveys = []
+        next_url = None
+        page_count = 0
+        has_more_pages = True
+        while has_more_pages and page_count < max_pages:
+            try:
+                if next_url:
+                    surveys_resp = client.get("surveys", full_url=next_url)
+                else:
+                    surveys_resp = client.get("surveys", params={"pageSize": page_size})
+            except QualtricsForbiddenError as exc:
+                if page_count == 0:
+                    LOGGER.warning("Cannot list surveys during discovery: %s", exc)
+                    return [], []
+                # Already have at least one page; surface what was gathered rather than
+                # discarding it, but make the truncation visible instead of silent.
+                LOGGER.warning(
+                    "Cannot list further survey pages during discovery after %d page(s): %s. "
+                    "Discovery will proceed with only the surveys already listed.",
+                    page_count, exc,
+                )
+                has_more_pages = False
+                break
+            page_count += 1
+            result = surveys_resp.get("result") or {}
+            surveys.extend(result.get("elements") or [])
+            next_url = result.get("nextPage")
+            has_more_pages = bool(next_url)
+
+        if has_more_pages:
+            LOGGER.warning(
+                "Stopped paginating GET /surveys during discovery after %d pages (safety "
+                "cap); some surveys may not get a survey_response_export dataset.",
+                max_pages,
+            )
+
         unique_survey_ids = []
         seen = set()
         for survey in surveys:
