@@ -21,12 +21,17 @@ from tap_qualtrics.exceptions import (
     QualtricsRateLimitError,
     QualtricsError,
     QualtricsForbiddenError,
+    QualtricsPaginationError,
 )
 from tap_qualtrics.streams.abstracts import IncrementalStream
 
 LOGGER = get_logger()
 DISCOVERY_MAX_WORKERS = 4
 DISCOVERY_EXPORT_LIMIT = 50
+# Sanity bound on GET /surveys pages during discovery. Not a real limit on how many surveys
+# an account may have (page_size=100 default => 10M+ surveys before this is reached) - it only
+# exists to turn a misbehaving/looping API into an explicit failure instead of a silent hang.
+DISCOVERY_MAX_SURVEY_PAGES = 100_000
 
 class SurveyResponseExport(IncrementalStream):
     tap_stream_id = "survey_response_export"
@@ -47,12 +52,66 @@ class SurveyResponseExport(IncrementalStream):
                 return client.fork()
             return client
 
-        try:
-            surveys_resp = client.get("surveys")
-        except QualtricsForbiddenError as exc:
-            LOGGER.warning("Cannot list surveys during discovery: %s", exc)
-            return [], []
-        surveys = (surveys_resp.get("result") or {}).get("elements", [])
+        # GET /surveys is paginated (result.nextPage); discovery must walk every page the
+        # same way the `surveys` stream itself does (see Surveys/BaseStream._paginate), or
+        # any survey past the first page is silently never considered for a response export
+        # dataset - with no log line distinguishing it from a survey skipped on purpose.
+        #
+        # This must run to actual completion (every page, however many there are) rather than
+        # stopping at an arbitrary page count: a cap that silently returns whatever was
+        # gathered so far is itself the same class of bug as not paginating at all - it just
+        # moves the cut-off point instead of removing it, and a config with a small page_size
+        # and/or a large account could still exceed it. DISCOVERY_MAX_SURVEY_PAGES below is not
+        # a page budget; it exists only to convert a misbehaving/looping API into an explicit,
+        # loud failure (never a silently truncated catalog) - see the loop-safety and
+        # record-completeness requirements in copilot-instructions.md.
+        page_size = getattr(client, "page_size", 100)
+        surveys = []
+        next_url = None
+        seen_urls = set()
+        page_count = 0
+        has_more_pages = True
+        while has_more_pages:
+            if next_url is not None and next_url in seen_urls:
+                raise QualtricsPaginationError(
+                    "GET /surveys returned a repeated nextPage URL ({}) during discovery "
+                    "after {} page(s); refusing to loop forever or silently return a partial "
+                    "survey listing.".format(next_url, page_count)
+                )
+            if page_count >= DISCOVERY_MAX_SURVEY_PAGES:
+                raise QualtricsPaginationError(
+                    "GET /surveys did not finish paginating during discovery after the safety "
+                    "cap of {} pages; refusing to silently return a partial survey listing. "
+                    "This likely indicates the API is not terminating pagination as expected.".format(
+                        DISCOVERY_MAX_SURVEY_PAGES
+                    )
+                )
+            if next_url is not None:
+                seen_urls.add(next_url)
+            try:
+                if next_url:
+                    surveys_resp = client.get("surveys", full_url=next_url)
+                else:
+                    surveys_resp = client.get("surveys", params={"pageSize": page_size})
+            except QualtricsForbiddenError as exc:
+                if page_count == 0:
+                    LOGGER.warning("Cannot list surveys during discovery: %s", exc)
+                    return [], []
+                # Already have at least one page; surface what was gathered rather than
+                # discarding it, but make the truncation visible instead of silent.
+                LOGGER.warning(
+                    "Cannot list further survey pages during discovery after %d page(s): %s. "
+                    "Discovery will proceed with only the surveys already listed.",
+                    page_count, exc,
+                )
+                has_more_pages = False
+                break
+            page_count += 1
+            result = surveys_resp.get("result") or {}
+            surveys.extend(result.get("elements") or [])
+            next_url = result.get("nextPage")
+            has_more_pages = bool(next_url)
+
         unique_survey_ids = []
         seen = set()
         for survey in surveys:
