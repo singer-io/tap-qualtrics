@@ -412,6 +412,90 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
         self.assertEqual(skipped, [])
         mock_logger.warning.assert_called_once()
 
+    def test_discovery_completes_with_many_pages(self):
+        """Regression test for page_size=1 with 1,001 surveys: previously a fixed max_pages
+        safety cap of 1000 silently stopped after survey 1000, leaving the 1,001st survey out
+        of the catalog with nothing logged. Pagination must run to actual completion rather
+        than giving up at an arbitrary page count."""
+        client = _make_client()
+        total_surveys = 1001
+
+        def get_side_effect(_path, params=None, full_url=None):  # pylint: disable=unused-argument
+            page_index = 0 if not full_url else int(full_url.rsplit("=", 1)[1])
+            next_index = page_index + 1
+            next_url = (
+                "https://qualtrics.example.com/surveys?page={}".format(next_index)
+                if next_index < total_surveys
+                else None
+            )
+            return {
+                "result": {
+                    "elements": [{"id": "SV_{}".format(page_index)}],
+                    "nextPage": next_url,
+                }
+            }
+
+        client.get.side_effect = get_side_effect
+        client.post.return_value = {"result": {"progressId": "pid1"}}
+        client.poll_export.return_value = {"result": {"status": "complete", "fileId": "fid1"}}
+        file_resp = MagicMock()
+        file_resp.content = json.dumps(
+            {"responses": [{"responseId": "R_1", "values": {"recordedDate": "2021-01-01"}}]}
+        ).encode()
+        client.get_file.return_value = file_resp
+
+        entries, skipped = SurveyResponseExport.discover_dynamic_entries(client)
+
+        self.assertEqual(len(entries), total_surveys)
+        self.assertEqual(skipped, [])
+        discovered_ids = {name.rsplit("__", 1)[1] for name, _, _ in entries}
+        # Every survey, including the 1,001st (which the old max_pages=1000 cap would have
+        # dropped), must be present.
+        self.assertIn("SV_1000", discovered_ids)
+
+    def test_repeated_next_page_url_raises_instead_of_looping_forever(self):
+        """If the API returns the same nextPage URL forever (a looping/misbehaving API),
+        discovery must fail loudly rather than hang or silently return a partial listing."""
+        from tap_qualtrics.exceptions import QualtricsPaginationError
+
+        client = _make_client()
+        looping_url = "https://qualtrics.example.com/surveys?skipToken=stuck"
+
+        def get_side_effect(_path, params=None, full_url=None):  # pylint: disable=unused-argument
+            return {"result": {"elements": [{"id": "SV_1"}], "nextPage": looping_url}}
+
+        client.get.side_effect = get_side_effect
+
+        with self.assertRaises(QualtricsPaginationError):
+            SurveyResponseExport.discover_dynamic_entries(client)
+
+    def test_safety_cap_raises_instead_of_returning_partial_catalog(self):
+        """If pagination somehow never terminates and never repeats a URL (every page
+        distinct), hitting the sanity cap must raise explicitly rather than silently
+        returning whatever was gathered so far as if it were the complete catalog."""
+        from tap_qualtrics.exceptions import QualtricsPaginationError
+        import tap_qualtrics.streams.survey_response_export as sre_module
+
+        client = _make_client()
+        page_counter = {"n": 0}
+
+        def get_side_effect(_path, params=None, full_url=None):  # pylint: disable=unused-argument
+            page_counter["n"] += 1
+            return {
+                "result": {
+                    "elements": [{"id": "SV_{}".format(page_counter["n"])}],
+                    "nextPage": "https://qualtrics.example.com/surveys?page={}".format(
+                        page_counter["n"] + 1
+                    ),
+                }
+            }
+
+        client.get.side_effect = get_side_effect
+
+        with patch.object(sre_module, "DISCOVERY_MAX_SURVEY_PAGES", 5):
+            with self.assertRaises(QualtricsPaginationError):
+                SurveyResponseExport.discover_dynamic_entries(client)
+
 
 if __name__ == "__main__":
     unittest.main()

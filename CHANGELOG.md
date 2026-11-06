@@ -1,7 +1,7 @@
 # Changelog
 
 ## 0.0.3
-  * `survey_response_export` discovery: follow `result.nextPage` when listing surveys via `GET /surveys`, so surveys past the first page (previously silently never considered for a dataset) are now discovered the same as any other survey.
+  * `survey_response_export` discovery: paginate through all of `GET /surveys` instead of only the first page, so every survey is considered for a dataset. Fails explicitly instead of silently truncating if pagination loops or can't complete.
 
 ## 0.0.2
   * Allow null `embeddedData` values in the distributions schema.
