@@ -1,10 +1,12 @@
 import base64
 import json
 import random
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Tuple
+from urllib.parse import urlsplit
 
 import backoff
 import requests
@@ -107,6 +109,11 @@ class Client:  # pylint: disable=too-many-instance-attributes
         self.config = config
         self.config_path = Path(config_path) if config_path else None
         self.data_center = config.get("data_center")
+        if not isinstance(self.data_center, str) or not re.fullmatch(
+            r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", self.data_center
+        ):
+            raise QualtricsError("Invalid data_center: expected a single Qualtrics data-center label.")
+        self._hostname = f"{self.data_center}.qualtrics.com".lower()
         self.grant_types = parse_grant_types(config.get("auth_method"))
         self._session = requests.Session()
         self.base_url = f"https://{self.data_center}.qualtrics.com/API/v3"
@@ -144,6 +151,30 @@ class Client:  # pylint: disable=too-many-instance-attributes
 
     def check_api_credentials(self) -> None:
         pass
+
+    def _validate_url(self, url: str) -> None:
+        """Reject destinations outside the configured HTTPS Qualtrics origin."""
+        try:
+            if not isinstance(url, str) or any(
+                char.isspace() or ord(char) < 32 or ord(char) == 127 or char == "\\"
+                for char in url
+            ):
+                raise ValueError
+            parsed = urlsplit(url)
+            valid = (
+                parsed.scheme == "https"
+                and parsed.hostname == self._hostname
+                and parsed.port in (None, 443)
+                and parsed.username is None
+                and parsed.password is None
+                and not parsed.fragment
+            )
+        except ValueError:
+            valid = False
+        if not valid:
+            raise QualtricsError(
+                "Refusing request outside the configured HTTPS Qualtrics origin or with an invalid URL."
+            )
 
     def _build_basic_auth_headers(self) -> Dict[str, str]:
         """Build Basic auth headers for client credentials token requests."""
@@ -191,10 +222,12 @@ class Client:  # pylint: disable=too-many-instance-attributes
             "redirect_uri": self.config.get("redirect_uri"),
         }
 
+        self._validate_url(self.oauth_token_endpoint)
         response = self._session.post(
             self.oauth_token_endpoint,
             data=data,
             timeout=self.request_timeout,
+            allow_redirects=False,
         )
         if response.status_code != 200:
             raise QualtricsError(
@@ -252,11 +285,13 @@ class Client:  # pylint: disable=too-many-instance-attributes
         }
 
         try:
+            self._validate_url(self.oauth_token_endpoint)
             response = self._session.post(
                 self.oauth_token_endpoint,
                 headers=headers,
                 data=data,
                 timeout=self.request_timeout,
+                allow_redirects=False,
             )
             if response.status_code != 200:
                 raise QualtricsError(
@@ -294,13 +329,14 @@ class Client:  # pylint: disable=too-many-instance-attributes
         """
         Sends an HTTP request to the specified API endpoint.
         """
+        endpoint = endpoint or f"{self.base_url}/{path}"
+        self._validate_url(endpoint)
         # Get the access token if it's not already set or expired
         self._obtain_oauth_token()
 
         params = params or {}
         headers = headers or {}
         body = body or {}
-        endpoint = endpoint or f"{self.base_url}/{path}"
         headers, params = self.authenticate(headers, params)
         try:
             return self._make_request(
@@ -354,6 +390,7 @@ class Client:  # pylint: disable=too-many-instance-attributes
         """Low-level request with retry/backoff."""
         kwargs.setdefault("headers", self._get_headers())
         kwargs.setdefault("timeout", self.request_timeout)
+        kwargs["allow_redirects"] = False
         with metrics.http_request_timer(url):
             response = self._session.request(method.upper(), url, **kwargs)
         raise_for_error(response)

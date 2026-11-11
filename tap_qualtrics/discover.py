@@ -56,7 +56,10 @@ def _fetch_sample_record(client, path):
     try:
         resp = client.get(path, params={"pageSize": 1})
         result = resp.get("result") or {}
-        elements = result.get("elements") or result.get("result") or []
+        elements = (
+            result.get("elements") or result.get("result")
+            or result.get("AvailableLanguages") or []
+        )
         return elements[0] if elements else None
     except Exception:  # pylint: disable=broad-exception-caught
         return None
