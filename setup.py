@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 
 setup(name="tap-qualtrics",
-      version="0.0.3",
+      version="1.0.1",
       description="Singer.io tap for extracting data from Qualtrics API",
       author="Stitch",
       url="http://singer.io",
