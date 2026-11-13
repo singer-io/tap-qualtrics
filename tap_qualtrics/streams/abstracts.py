@@ -285,6 +285,15 @@ class SurveyChildStream(FullTableStream):
 class IncrementalSurveyChildStream(IncrementalStream):
     """Incremental stream fetched once per survey; uses parent's lastModified as replication key."""
 
+    def __init__(self, client=None, catalog_entry=None) -> None:
+        super().__init__(client=client, catalog_entry=catalog_entry)
+        self._starting_bookmark = None
+
+    def get_bookmark(self, state: dict, stream: str, key: Any = None) -> str:
+        if self._starting_bookmark is None:
+            self._starting_bookmark = super().get_bookmark(state, stream, key)
+        return self._starting_bookmark
+
     def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[Dict]:
         survey_id = (parent_id or {}).get("id") or parent_id
         if not survey_id:

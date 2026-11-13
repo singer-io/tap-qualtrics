@@ -220,6 +220,11 @@ the parent's incremental filter. Each record carries the survey's `lastModified`
 stream maintains its own bookmark using the existing child-stream implementation.
 Changes are detected through the parent survey's modification timestamp, not separate
 timestamps supplied by these endpoints.
+When definitions, questions, or flows are selected, survey traversal commits its
+bookmarks only after all surveys succeed. A failed traversal is replayed on the next
+run, so records already emitted during that traversal may be emitted again.
+If an earlier version of these streams missed records, clear the affected stream and
+`surveys` bookmarks, or backfill with fresh state, to recover them.
 Re-run discovery to refresh replication metadata. When adding these streams to a pipeline
 with existing bookmarks, clear the bookmarks for the streams being backfilled and all
 their ancestors, or run a separate initial sync with fresh state to backfill older surveys.

@@ -1,6 +1,8 @@
 """Tests for the survey definitions, questions, and flows streams."""
+import copy
 from unittest.mock import MagicMock, patch
 
+import pytest
 import singer
 from jsonschema import Draft4Validator, FormatChecker
 from singer import metadata
@@ -176,3 +178,123 @@ def test_questions_retain_repeating_question_ids_per_survey():
         ) == singer.utils.strptime_to_utc(
             surveys[-1]["lastModified"]
         )
+
+
+@pytest.mark.parametrize("stream_cls", DETAIL_STREAMS)
+def test_out_of_order_surveys_and_interrupted_sync_resume(stream_cls):
+    client = _client()
+    surveys = [
+        {"id": "SV_new", "lastModified": "2026-02-01T00:00:00Z"},
+        {"id": "SV_old", "lastModified": "2026-01-01T00:00:00Z"},
+    ]
+    fail = [True]
+
+    def get(path, **kwargs):
+        _ = kwargs
+        if path == "surveys":
+            return {"result": {"elements": copy.deepcopy(surveys)}}
+        if "SV_old" in path and fail[0]:
+            raise RuntimeError("interrupted")
+        survey_id = path.split("/")[1]
+        if stream_cls is SurveyQuestions:
+            return {"result": {"elements": [{"QuestionID": "QID1"}]}}
+        if stream_cls is SurveyDefinitions:
+            return {"result": {"SurveyID": survey_id}}
+        return {"result": {"FlowID": "FL_1", "Flow": []}}
+
+    client.get.side_effect = get
+    catalog = _selected_catalog({stream_cls.tap_stream_id})
+    initial_bookmarks = {
+        "surveys": {"lastModified": "2020-01-01T00:00:00Z"},
+        stream_cls.tap_stream_id: {"lastModified": "2020-01-01T00:00:00Z"},
+    }
+    state = {"bookmarks": copy.deepcopy(initial_bookmarks)}
+    with patch("tap_qualtrics.streams.abstracts.write_record") as write_record, \
+            patch("tap_qualtrics.streams.abstracts.write_schema"), \
+            patch("singer.write_state"):
+        with pytest.raises(RuntimeError, match="interrupted"):
+            sync(client, client.config, catalog, state)
+        assert state["bookmarks"] == initial_bookmarks
+        fail[0] = False
+        write_record.reset_mock()
+        sync(client, client.config, catalog, state)
+
+    assert [args[1]["survey_id"] for args, _ in write_record.call_args_list] == [
+        "SV_new", "SV_old",
+    ]
+    for stream_id in ("surveys", stream_cls.tap_stream_id):
+        assert singer.utils.strptime_to_utc(
+            state["bookmarks"][stream_id]["lastModified"]
+        ) == singer.utils.strptime_to_utc(surveys[0]["lastModified"])
+
+
+def test_question_page_failure_does_not_checkpoint_partial_survey():
+    client = _client()
+    fail = [True]
+    next_page = "https://example.test/questions?page=2"
+
+    def get(path, **kwargs):
+        if path == "surveys":
+            return {"result": {"elements": [PARENT]}}
+        if kwargs.get("full_url") == next_page:
+            if fail[0]:
+                raise RuntimeError("page failed")
+            return {"result": {"elements": [{"QuestionID": "QID2"}]}}
+        return {
+            "result": {
+                "elements": [{"QuestionID": "QID1"}],
+                "nextPage": next_page,
+            }
+        }
+
+    client.get.side_effect = get
+    catalog = _selected_catalog({"survey_questions"})
+    state = {"bookmarks": {"surveys": {"lastModified": "2020-01-01T00:00:00Z"}}}
+    initial_bookmarks = copy.deepcopy(state["bookmarks"])
+    with patch("tap_qualtrics.streams.abstracts.write_record") as write_record, \
+            patch("tap_qualtrics.streams.abstracts.write_schema"), \
+            patch("singer.write_state"):
+        with pytest.raises(RuntimeError, match="page failed"):
+            sync(client, client.config, catalog, state)
+        assert state["bookmarks"] == initial_bookmarks
+        fail[0] = False
+        write_record.reset_mock()
+        sync(client, client.config, catalog, state)
+
+    assert [args[1]["QuestionID"] for args, _ in write_record.call_args_list] == [
+        "QID1", "QID2",
+    ]
+
+
+@pytest.mark.parametrize("stream_id,fields", [
+    ("survey_definitions", {
+        "SurveyID": "SV_1",
+        "UnknownDefinitionField": {"nested": [1, None]},
+        "Questions": {"QID1": {"translations": {"FR": "Bonjour"}}},
+    }),
+    ("survey_questions", {
+        "QuestionID": "QID1",
+        "Choices": {str(i): {"Display": str(i), "extra": {"flag": True}}
+                    for i in range(1, 5)},
+        "RecodeValues": {str(i): str(i) for i in range(1, 5)},
+        "Configuration": {"custom": {"nested": 1}},
+        "Validation": {"Settings": {"Logic": {"third": {"operator": "eq"}}}},
+        "UnknownQuestionField": {"translations": ["FR"]},
+    }),
+    ("survey_flows", {
+        "FlowID": "FL_1",
+        "Flow": [{"Type": "Branch", "ID": "BL_1", "Flow": [
+            {"Type": "Block", "ID": "BL_2"},
+        ]}],
+        "UnknownFlowField": {"flag": True},
+    }),
+])
+def test_complete_payload_survives_singer_transformation(stream_id, fields):
+    entry = discover().get_stream(stream_id)
+    record = {"survey_id": "SV_1", "lastModified": LAST_MODIFIED, **fields}
+    schema = entry.schema.to_dict()
+    with singer.Transformer() as transformer:
+        transformed = transformer.transform(copy.deepcopy(record), schema, metadata.to_map(entry.metadata))
+    for key, value in fields.items():
+        assert transformed[key] == value
+    Draft4Validator(schema, format_checker=FormatChecker()).validate(transformed)

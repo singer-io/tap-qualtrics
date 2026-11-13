@@ -13,12 +13,14 @@
                     "FlowID": {"type": ["string", "null"]},
                     "Type": {"type": ["string", "null"]},
                     "Properties": {"type": ["object", "null"]}
-                }
+                },
+                "patternProperties": {".*": {}}
             }
         },
         "lastModified": {
             "type": ["string", "null"],
             "format": "date-time"
         }
-    }
+    },
+    "patternProperties": {".*": {}}
 }
