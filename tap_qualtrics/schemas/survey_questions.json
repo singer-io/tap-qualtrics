@@ -144,6 +144,19 @@
                 "string"
             ]
         },
+        "survey_id": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "lastModified": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
         "Randomization": {
             "type": [
                 "null",
@@ -340,6 +353,5 @@
                 }
             }
         }
-    },
-    "additionalProperties": true
+    }
 }

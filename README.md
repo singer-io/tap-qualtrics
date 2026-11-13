@@ -6,7 +6,7 @@ following the [Singer spec](https://github.com/singer-io/getting-started/blob/ma
 This tap:
 
 - Pulls raw data from the [Qualtrics API](https://api.qualtrics.com).
-- Extracts the following resources (48 streams across 11 groups):
+- Extracts the following resources (51 streams across 11 groups):
   - Users, Groups, Audit, Libraries, Directories, Mailing Lists, Segments, Samples, Surveys, Distributions, Tickets
 - Outputs the schema for each resource
 - Incrementally pulls data based on the input state
@@ -154,6 +154,27 @@ This tap:
 - Primary keys: `SurveyID`
 - Replication strategy: FULL_TABLE
 
+**survey_definitions** *(child of surveys)*
+- Endpoint: `GET /survey-definitions/{surveyId}`
+- Primary key: `SurveyID`
+- Replication strategy: INCREMENTAL
+- Replication key: `lastModified` (inherited from the parent survey)
+- One row per survey, including the complete definition payload.
+
+**survey_questions** *(child of surveys)*
+- Endpoint: `GET /survey-definitions/{surveyId}/questions`
+- Primary keys: `survey_id`, `QuestionID`
+- Replication strategy: INCREMENTAL
+- Replication key: `lastModified` (inherited from the parent survey)
+- One row per question, including questions in the survey's Trash block.
+
+**survey_flows** *(child of surveys)*
+- Endpoint: `GET /survey-definitions/{surveyId}/flow`
+- Primary key: `survey_id`
+- Replication strategy: INCREMENTAL
+- Replication key: `lastModified` (inherited from the parent survey)
+- One row per survey with the complete flow payload.
+
 **[survey_quotas](https://api.qualtrics.com/371bb797b85f7-get-survey-quotas)** *(child of surveys)*
 - Primary keys: `quotaId`
 - Replication strategy: FULL_TABLE
@@ -194,8 +215,8 @@ This tap:
 - Selecting translations automatically traverses surveys and languages, even when those
   streams are not selected for output.
 
-These four streams follow the surveys bookmark and only fetch surveys that pass the
-parent's incremental filter. Each record carries the survey's `lastModified`, and each
+These survey child streams follow the surveys bookmark and only fetch surveys that pass
+the parent's incremental filter. Each record carries the survey's `lastModified`, and each
 stream maintains its own bookmark using the existing child-stream implementation.
 Changes are detected through the parent survey's modification timestamp, not separate
 timestamps supplied by these endpoints.
