@@ -257,6 +257,27 @@ class QualtricsBaseTest(BaseCase):
                 cls.OBEYS_START_DATE: True,
                 cls.API_LIMIT: 100
             },
+            "survey_definitions": {
+                cls.PRIMARY_KEYS: {"SurveyID"},
+                cls.REPLICATION_METHOD: cls.INCREMENTAL,
+                cls.REPLICATION_KEYS: {"lastModified"},
+                cls.OBEYS_START_DATE: True,
+                cls.API_LIMIT: 100
+            },
+            "survey_questions": {
+                cls.PRIMARY_KEYS: {"survey_id", "QuestionID"},
+                cls.REPLICATION_METHOD: cls.INCREMENTAL,
+                cls.REPLICATION_KEYS: {"lastModified"},
+                cls.OBEYS_START_DATE: True,
+                cls.API_LIMIT: 100
+            },
+            "survey_flows": {
+                cls.PRIMARY_KEYS: {"survey_id"},
+                cls.REPLICATION_METHOD: cls.INCREMENTAL,
+                cls.REPLICATION_KEYS: {"lastModified"},
+                cls.OBEYS_START_DATE: True,
+                cls.API_LIMIT: 100
+            },
             "survey_options": {
                 cls.PRIMARY_KEYS: {"survey_id"},
                 cls.REPLICATION_METHOD: cls.INCREMENTAL,

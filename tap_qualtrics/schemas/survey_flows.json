@@ -1,0 +1,26 @@
+{
+    "type": "object",
+    "properties": {
+        "survey_id": {"type": ["string", "null"]},
+        "FlowID": {"type": ["string", "null"]},
+        "Type": {"type": ["string", "null"]},
+        "Properties": {"type": ["object", "null"]},
+        "Flow": {
+            "type": ["array", "null"],
+            "items": {
+                "type": "object",
+                "properties": {
+                    "FlowID": {"type": ["string", "null"]},
+                    "Type": {"type": ["string", "null"]},
+                    "Properties": {"type": ["object", "null"]}
+                },
+                "patternProperties": {".*": {}}
+            }
+        },
+        "lastModified": {
+            "type": ["string", "null"],
+            "format": "date-time"
+        }
+    },
+    "patternProperties": {".*": {}}
+}

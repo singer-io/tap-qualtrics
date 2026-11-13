@@ -1,1 +1,23 @@
-{"type": "object", "properties": {}, "additionalProperties": true}
+{
+    "type": "object",
+    "properties": {
+        "SurveyID": {"type": ["string", "null"]},
+        "SurveyName": {"type": ["string", "null"]},
+        "SurveyStatus": {"type": ["string", "null"]},
+        "Questions": {"type": ["object", "null"]},
+        "Blocks": {"type": ["object", "null"]},
+        "SurveyFlow": {"type": ["object", "null"]},
+        "SurveyOptions": {"type": ["object", "null"]},
+        "Quotas": {"type": ["object", "null"]},
+        "QuotaGroups": {"type": ["object", "null"]},
+        "ResponseSets": {"type": ["object", "null"]},
+        "Scoring": {"type": ["object", "null"]},
+        "ProjectInfo": {"type": ["object", "null"]},
+        "survey_id": {"type": ["string", "null"]},
+        "lastModified": {
+            "type": ["string", "null"],
+            "format": "date-time"
+        }
+    },
+    "patternProperties": {".*": {}}
+}
