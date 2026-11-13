@@ -1,7 +1,7 @@
 # Changelog
 
 ## 1.0.1
-  * `survey_response_export` discovery: paginate through all of `GET /surveys` instead of only the first page, so every survey is considered for a dataset. Fails explicitly instead of silently truncating if pagination loops or can't complete. [#5](https://github.com/singer-io/tap-qualtrics/pull/5)
+  * `survey_response_export` discovery: follow `GET /surveys` pagination so surveys beyond the first page are considered for a dataset. Fails explicitly if pagination cycles or reaches the 100,000-page safety cap; if a later page is forbidden, logs a warning and proceeds with surveys already listed. [#5](https://github.com/singer-io/tap-qualtrics/pull/5)
 
 ## 1.0.0
   * Validate Qualtrics request origins, reject redirects, and detect pagination cycles.
