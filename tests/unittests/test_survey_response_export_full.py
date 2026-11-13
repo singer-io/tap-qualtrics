@@ -8,6 +8,7 @@ from tap_qualtrics.exceptions import (
     QualtricsBackoffError,
     QualtricsBadGatewayError,
     QualtricsError,
+    QualtricsForbiddenError,
 )
 
 
@@ -339,6 +340,262 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
         entries, _ = SurveyResponseExport.discover_dynamic_entries(client)
         self.assertEqual(entries, [])
         client.post.assert_not_called()
+
+    def test_discovery_follows_survey_pagination(self):
+        """GET /surveys is itself paginated; discovery must follow result.nextPage across
+        every page (as the `surveys` stream does) or surveys past the first page never get
+        considered for a survey_response_export dataset at all - with nothing logged, unlike
+        a survey that's deliberately skipped for having no responses."""
+        client = _make_client()
+        page_one = {
+            "result": {
+                "elements": [{"id": "SV_1"}],
+                "nextPage": "https://qualtrics.example.com/surveys?skipToken=abc",
+            }
+        }
+        page_two = {"result": {"elements": [{"id": "SV_2"}], "nextPage": None}}
+
+        def get_side_effect(_path, params=None, full_url=None):  # pylint: disable=unused-argument
+            if full_url:
+                return page_two
+            return page_one
+
+        client.get.side_effect = get_side_effect
+        client.post.return_value = {"result": {"progressId": "pid1"}}
+        client.poll_export.return_value = {"result": {"status": "complete", "fileId": "fid1"}}
+        file_resp = MagicMock()
+        file_resp.content = json.dumps(
+            {"responses": [{"responseId": "R_1", "values": {"recordedDate": "2021-01-01"}}]}
+        ).encode()
+        client.get_file.return_value = file_resp
+
+        entries, skipped = SurveyResponseExport.discover_dynamic_entries(client)
+
+        discovered_ids = sorted(name.rsplit("__", 1)[1] for name, _, _ in entries)
+        self.assertEqual(discovered_ids, ["SV_1", "SV_2"])
+        self.assertEqual(skipped, [])
+        # Second page must be requested via the full nextPage URL, not re-derived params.
+        second_call = client.get.call_args_list[1]
+        self.assertEqual(second_call.kwargs.get("full_url"), page_one["result"]["nextPage"])
+
+    @patch("tap_qualtrics.streams.survey_response_export.LOGGER")
+    def test_forbidden_on_later_page_keeps_earlier_surveys(self, mock_logger):
+        """A 403 on page 2+ must not discard surveys already collected from earlier pages,
+        but the truncation has to be logged so it isn't mistaken for 'account only has this
+        many surveys'."""
+        client = _make_client()
+        page_one = {
+            "result": {
+                "elements": [{"id": "SV_1"}],
+                "nextPage": "https://qualtrics.example.com/surveys?skipToken=abc",
+            }
+        }
+
+        def get_side_effect(_path, params=None, full_url=None):  # pylint: disable=unused-argument
+            if full_url:
+                raise QualtricsForbiddenError("403")
+            return page_one
+
+        client.get.side_effect = get_side_effect
+        client.post.return_value = {"result": {"progressId": "pid1"}}
+        client.poll_export.return_value = {"result": {"status": "complete", "fileId": "fid1"}}
+        file_resp = MagicMock()
+        file_resp.content = json.dumps(
+            {"responses": [{"responseId": "R_1", "values": {"recordedDate": "2021-01-01"}}]}
+        ).encode()
+        client.get_file.return_value = file_resp
+
+        entries, skipped = SurveyResponseExport.discover_dynamic_entries(client)
+
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0][0], "survey_response_export__SV_1")
+        self.assertEqual(skipped, [])
+        mock_logger.warning.assert_called_once()
+
+    def test_discovery_completes_with_many_pages(self):
+        """Regression test for page_size=1 with 1,001 surveys: previously a fixed max_pages
+        safety cap of 1000 silently stopped after survey 1000, leaving the 1,001st survey out
+        of the catalog with nothing logged. Pagination must run to actual completion rather
+        than giving up at an arbitrary page count."""
+        client = _make_client()
+        total_surveys = 1001
+
+        def get_side_effect(_path, params=None, full_url=None):  # pylint: disable=unused-argument
+            page_index = 0 if not full_url else int(full_url.rsplit("=", 1)[1])
+            next_index = page_index + 1
+            next_url = (
+                "https://qualtrics.example.com/surveys?page={}".format(next_index)
+                if next_index < total_surveys
+                else None
+            )
+            return {
+                "result": {
+                    "elements": [{"id": "SV_{}".format(page_index)}],
+                    "nextPage": next_url,
+                }
+            }
+
+        client.get.side_effect = get_side_effect
+        client.post.return_value = {"result": {"progressId": "pid1"}}
+        client.poll_export.return_value = {"result": {"status": "complete", "fileId": "fid1"}}
+        file_resp = MagicMock()
+        file_resp.content = json.dumps(
+            {"responses": [{"responseId": "R_1", "values": {"recordedDate": "2021-01-01"}}]}
+        ).encode()
+        client.get_file.return_value = file_resp
+
+        entries, skipped = SurveyResponseExport.discover_dynamic_entries(client)
+
+        self.assertEqual(len(entries), total_surveys)
+        self.assertEqual(skipped, [])
+        discovered_ids = {name.rsplit("__", 1)[1] for name, _, _ in entries}
+        # Every survey, including the 1,001st (which the old max_pages=1000 cap would have
+        # dropped), must be present.
+        self.assertIn("SV_1000", discovered_ids)
+
+    def test_repeated_next_page_url_raises_instead_of_looping_forever(self):
+        """If the API returns the same nextPage URL forever (a looping/misbehaving API),
+        discovery must fail loudly rather than hang or silently return a partial listing."""
+        from tap_qualtrics.exceptions import QualtricsPaginationError
+
+        client = _make_client()
+        looping_url = "https://qualtrics.example.com/surveys?skipToken=stuck"
+
+        def get_side_effect(_path, params=None, full_url=None):  # pylint: disable=unused-argument
+            return {"result": {"elements": [{"id": "SV_1"}], "nextPage": looping_url}}
+
+        client.get.side_effect = get_side_effect
+
+        with self.assertRaises(QualtricsPaginationError):
+            SurveyResponseExport.discover_dynamic_entries(client)
+
+    def test_safety_cap_removed_large_legitimate_extraction_completes(self):
+        """A legitimate large account must not be truncated by any fixed page-count cap:
+        every page here is distinct and contributes a genuinely new survey id, well past the
+        old 1000-page example above, and discovery must still run to full completion."""
+        client = _make_client()
+        total_surveys = 2500
+
+        def get_side_effect(_path, params=None, full_url=None):  # pylint: disable=unused-argument
+            page_index = 0 if not full_url else int(full_url.rsplit("=", 1)[1])
+            next_index = page_index + 1
+            next_url = (
+                "https://qualtrics.example.com/surveys?page={}".format(next_index)
+                if next_index < total_surveys
+                else None
+            )
+            return {
+                "result": {
+                    "elements": [{"id": "SV_{}".format(page_index)}],
+                    "nextPage": next_url,
+                }
+            }
+
+        client.get.side_effect = get_side_effect
+        client.post.return_value = {"result": {"progressId": "pid1"}}
+        client.poll_export.return_value = {"result": {"status": "complete", "fileId": "fid1"}}
+        file_resp = MagicMock()
+        file_resp.content = json.dumps(
+            {"responses": [{"responseId": "R_1", "values": {"recordedDate": "2021-01-01"}}]}
+        ).encode()
+        client.get_file.return_value = file_resp
+
+        entries, skipped = SurveyResponseExport.discover_dynamic_entries(client)
+
+        self.assertEqual(len(entries), total_surveys)
+        self.assertEqual(skipped, [])
+
+    def test_stale_pagination_raises_instead_of_looping_forever(self):
+        """If the API keeps answering a fresh (never-repeated) nextPage URL but the
+        underlying survey ids never advance, the repeated-URL check alone would never fire;
+        discovery must still detect the lack of forward progress and fail loudly instead of
+        looping forever or silently returning a partial listing."""
+        from tap_qualtrics.exceptions import QualtricsPaginationError
+
+        client = _make_client()
+        page_counter = {"n": 0}
+
+        def get_side_effect(_path, params=None, full_url=None):  # pylint: disable=unused-argument
+            page_counter["n"] += 1
+            return {
+                "result": {
+                    # Same survey id every time: a distinct URL (so the repeated-cursor check
+                    # doesn't trip) but zero forward progress.
+                    "elements": [{"id": "SV_1"}],
+                    "nextPage": "https://qualtrics.example.com/surveys?page={}".format(
+                        page_counter["n"] + 1
+                    ),
+                }
+            }
+
+        client.get.side_effect = get_side_effect
+
+        with self.assertRaises(QualtricsPaginationError):
+            SurveyResponseExport.discover_dynamic_entries(client)
+
+        # Must fail fast (within the small stale-page threshold), not after an arbitrary
+        # large number of requests.
+        self.assertLessEqual(page_counter["n"], 10)
+
+    def test_stale_pagination_with_empty_pages_raises(self):
+        """A page with zero elements but a distinct nextPage URL (and more pages still
+        claimed) is just as much 'no forward progress' as a repeated survey id."""
+        from tap_qualtrics.exceptions import QualtricsPaginationError
+
+        client = _make_client()
+        page_counter = {"n": 0}
+
+        def get_side_effect(_path, params=None, full_url=None):  # pylint: disable=unused-argument
+            page_counter["n"] += 1
+            return {
+                "result": {
+                    "elements": [],
+                    "nextPage": "https://qualtrics.example.com/surveys?page={}".format(
+                        page_counter["n"] + 1
+                    ),
+                }
+            }
+
+        client.get.side_effect = get_side_effect
+
+        with self.assertRaises(QualtricsPaginationError):
+            SurveyResponseExport.discover_dynamic_entries(client)
+
+    def test_occasional_stale_pages_do_not_raise(self):
+        """A single stale page (or a run shorter than the threshold) amid otherwise
+        progressing pagination is not itself an error - only a sustained run of pages with
+        zero new survey ids is a real failure signature."""
+        client = _make_client()
+        # Pattern: new id, stale, new id, stale, new id, done. No run of staleness reaches
+        # DISCOVERY_MAX_STALE_PAGES (3).
+        pages = [
+            {"elements": [{"id": "SV_1"}], "nextPage": "https://qualtrics.example.com/p2"},
+            {"elements": [], "nextPage": "https://qualtrics.example.com/p3"},
+            {"elements": [{"id": "SV_2"}], "nextPage": "https://qualtrics.example.com/p4"},
+            {"elements": [], "nextPage": "https://qualtrics.example.com/p5"},
+            {"elements": [{"id": "SV_3"}], "nextPage": None},
+        ]
+        call_index = {"n": 0}
+
+        def get_side_effect(_path, params=None, full_url=None):  # pylint: disable=unused-argument
+            page = pages[call_index["n"]]
+            call_index["n"] += 1
+            return {"result": page}
+
+        client.get.side_effect = get_side_effect
+        client.post.return_value = {"result": {"progressId": "pid1"}}
+        client.poll_export.return_value = {"result": {"status": "complete", "fileId": "fid1"}}
+        file_resp = MagicMock()
+        file_resp.content = json.dumps(
+            {"responses": [{"responseId": "R_1", "values": {"recordedDate": "2021-01-01"}}]}
+        ).encode()
+        client.get_file.return_value = file_resp
+
+        entries, skipped = SurveyResponseExport.discover_dynamic_entries(client)
+
+        discovered_ids = sorted(name.rsplit("__", 1)[1] for name, _, _ in entries)
+        self.assertEqual(discovered_ids, ["SV_1", "SV_2", "SV_3"])
+        self.assertEqual(skipped, [])
 
 
 if __name__ == "__main__":

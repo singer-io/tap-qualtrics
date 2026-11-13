@@ -119,18 +119,21 @@ class TestDiscover(unittest.TestCase):
 
     def test_discover_with_client_calls_access_checks(self):
         mock_client = MagicMock()
+        mock_client.get.return_value = {"result": {"elements": [], "nextPage": None}}
         with patch("tap_qualtrics.discover._apply_access_checks") as mock_check:
             discover(client=mock_client)
         mock_check.assert_called_once()
 
     def test_discover_returns_catalog_with_streams(self):
         mock_client = MagicMock()
+        mock_client.get.return_value = {"result": {"elements": [], "nextPage": None}}
         with patch("tap_qualtrics.discover._apply_access_checks"):
             catalog = discover(client=mock_client)
         self.assertTrue(len(catalog.streams) > 0)
 
     def test_discover_excludes_forbidden_streams(self):
         mock_client = MagicMock()
+        mock_client.get.return_value = {"result": {"elements": [], "nextPage": None}}
 
         def fake_access_checks(client, schemas, fm):
             schemas.pop("users", None)
