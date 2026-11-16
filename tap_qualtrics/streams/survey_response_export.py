@@ -73,8 +73,8 @@ class SurveyResponseExport(IncrementalStream):
         # same nextPage URL answered twice) and lack of forward progress (consecutive pages
         # that contribute no not-yet-seen survey id) - see the loop-safety and
         # record-completeness requirements in copilot-instructions.md.
-        page_size = getattr(client, "page_size", 100)
-        surveys = []
+        page_size = getattr(client, "page_size", None) or 100
+        unique_survey_ids = []
         seen_survey_ids = set()
         next_url = None
         seen_urls = set()
@@ -111,13 +111,13 @@ class SurveyResponseExport(IncrementalStream):
             page_count += 1
             result = surveys_resp.get("result") or {}
             page_elements = result.get("elements") or []
-            surveys.extend(page_elements)
 
             new_ids_this_page = 0
             for survey in page_elements:
                 survey_id = survey.get("id") if isinstance(survey, dict) else survey
                 if survey_id and survey_id not in seen_survey_ids:
                     seen_survey_ids.add(survey_id)
+                    unique_survey_ids.append(survey_id)
                     new_ids_this_page += 1
 
             next_url = result.get("nextPage")
@@ -145,15 +145,6 @@ class SurveyResponseExport(IncrementalStream):
                     "Discovery survey listing in progress: %d page(s), %d unique survey id(s) "
                     "so far.", page_count, len(seen_survey_ids),
                 )
-
-        unique_survey_ids = []
-        seen = set()
-        for survey in surveys:
-            survey_id = survey.get("id") if isinstance(survey, dict) else survey
-            if not survey_id or survey_id in seen:
-                continue
-            seen.add(survey_id)
-            unique_survey_ids.append(survey_id)
 
         # Qualtrics has no documented cancel/delete endpoint for these export jobs.
         # Discovery therefore creates provider-managed jobs solely to infer
