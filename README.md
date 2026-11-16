@@ -154,21 +154,21 @@ This tap:
 - Primary keys: `SurveyID`
 - Replication strategy: FULL_TABLE
 
-**survey_definitions** *(child of surveys)*
+**[survey_definitions](https://developer-docs.qualtrics.com/docs/public-api/surveyDefinitions/get-survey/#)** *(child of surveys)*
 - Endpoint: `GET /survey-definitions/{surveyId}`
 - Primary key: `SurveyID`
 - Replication strategy: INCREMENTAL
 - Replication key: `lastModified` (inherited from the parent survey)
 - One row per survey, including the complete definition payload.
 
-**survey_questions** *(child of surveys)*
+**[survey_questions](https://developer-docs.qualtrics.com/docs/public-api/surveyDefinitions/get-questions/)** *(child of surveys)*
 - Endpoint: `GET /survey-definitions/{surveyId}/questions`
 - Primary keys: `survey_id`, `QuestionID`
 - Replication strategy: INCREMENTAL
 - Replication key: `lastModified` (inherited from the parent survey)
 - One row per question, including questions in the survey's Trash block.
 
-**survey_flows** *(child of surveys)*
+**[survey_flows](https://developer-docs.qualtrics.com/docs/public-api/surveyDefinitions/get-flow/)** *(child of surveys)*
 - Endpoint: `GET /survey-definitions/{surveyId}/flow`
 - Primary key: `survey_id`
 - Replication strategy: INCREMENTAL
@@ -230,6 +230,15 @@ with existing bookmarks, clear the bookmarks for the streams being backfilled an
 their ancestors, or run a separate initial sync with fresh state to backfill older surveys.
 For translations, clear `survey_translations`, `survey_languages`, and `surveys` bookmarks.
 Set `start_date` early enough to include the surveys being backfilled.
+
+### Test Results
+
+Latest local unit-test run:
+
+```text
+Command: python3 -m pytest -q tests/unittests
+Result: 570 passed, 2 subtests passed
+```
 
 ### Dynamic Export Discovery
 
