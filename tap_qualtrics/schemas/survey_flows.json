@@ -1,26 +1,83 @@
 {
     "type": "object",
     "properties": {
-        "survey_id": {"type": ["string", "null"]},
-        "FlowID": {"type": ["string", "null"]},
-        "Type": {"type": ["string", "null"]},
-        "Properties": {"type": ["object", "null"]},
+        "survey_id": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "FlowID": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "Type": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "Properties": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "properties": {
+                "Count": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                }
+            },
+            "additionalProperties": true
+        },
         "Flow": {
-            "type": ["array", "null"],
+            "type": [
+                "null",
+                "array"
+            ],
             "items": {
                 "type": "object",
                 "properties": {
-                    "FlowID": {"type": ["string", "null"]},
-                    "Type": {"type": ["string", "null"]},
-                    "Properties": {"type": ["object", "null"]}
+                    "FlowID": {
+                        "type": [
+                            "null",
+                            "string"
+                        ]
+                    },
+                    "Type": {
+                        "type": [
+                            "null",
+                            "string"
+                        ]
+                    },
+                    "ID": {
+                        "type": [
+                            "null",
+                            "string"
+                        ]
+                    },
+                    "Properties": {
+                        "type": [
+                            "null",
+                            "object"
+                        ],
+                        "additionalProperties": true
+                    }
                 },
-                "patternProperties": {".*": {}}
+                "additionalProperties": true
             }
         },
         "lastModified": {
-            "type": ["string", "null"],
+            "type": [
+                "null",
+                "string"
+            ],
             "format": "date-time"
         }
     },
-    "patternProperties": {".*": {}}
+    "additionalProperties": true
 }

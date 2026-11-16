@@ -1,41 +1,147 @@
 {
     "type": "object",
     "properties": {
-        "survey_id": {"type": ["null", "string"]},
-        "QuestionID": {"type": ["null", "string"]},
-        "DataExportTag": {"type": ["null", "string"]},
-        "QuestionText": {"type": ["null", "string"]},
-        "QuestionType": {"type": ["null", "string"]},
-        "Selector": {"type": ["null", "string"]},
-        "SubSelector": {"type": ["null", "string"]},
-        "QuestionDescription": {"type": ["null", "string"]},
+        "survey_id": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "QuestionID": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "DataExportTag": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "QuestionText": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "QuestionType": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "Selector": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "SubSelector": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "QuestionDescription": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
         "ChoiceOrder": {
-            "type": ["null", "array"],
-            "items": {},
-            "description": "Choice IDs can be strings or integers; preserve their original types."
+            "type": [
+                "null",
+                "array"
+            ],
+            "items": {
+                "type": [
+                    "string",
+                    "integer"
+                ]
+            }
         },
         "Choices": {
-            "type": ["null", "object", "array"],
-            "patternProperties": {".*": {"type": ["null", "object"]}},
-            "items": {"type": ["null", "object"]}
+            "type": [
+                "null",
+                "object",
+                "array"
+            ],
+            "additionalProperties": {
+                "type": [
+                    "null",
+                    "object"
+                ]
+            },
+            "items": {
+                "type": [
+                    "null",
+                    "object"
+                ]
+            }
         },
         "RecodeValues": {
-            "type": ["null", "object"],
-            "patternProperties": {".*": {"type": ["null", "string"]}}
+            "type": [
+                "null",
+                "object"
+            ],
+            "additionalProperties": {
+                "type": [
+                    "null",
+                    "string"
+                ]
+            }
         },
-        "Configuration": {"type": ["null", "object"]},
-        "Validation": {"type": ["null", "object"]},
+        "Configuration": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "additionalProperties": true
+        },
+        "Validation": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "additionalProperties": true
+        },
         "Language": {
-            "type": ["null", "array"],
-            "items": {"type": "string"}
+            "type": [
+                "null",
+                "array",
+                "object"
+            ],
+            "items": {
+                "type": "string"
+            }
         },
-        "NextAnswerId": {"type": ["null", "integer"]},
-        "NextChoiceId": {"type": ["null", "integer"]},
-        "Randomization": {"type": ["null", "string"]},
+        "NextAnswerId": {
+            "type": [
+                "null",
+                "integer"
+            ]
+        },
+        "NextChoiceId": {
+            "type": [
+                "null",
+                "integer"
+            ]
+        },
+        "Randomization": {
+            "type": [
+                "null",
+                "string",
+                "object"
+            ]
+        },
         "lastModified": {
-            "type": ["null", "string"],
+            "type": [
+                "null",
+                "string"
+            ],
             "format": "date-time"
         }
     },
-    "patternProperties": {".*": {}}
+    "additionalProperties": true
 }

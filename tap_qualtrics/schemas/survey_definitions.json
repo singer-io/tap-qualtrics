@@ -1,23 +1,100 @@
 {
     "type": "object",
     "properties": {
-        "SurveyID": {"type": ["string", "null"]},
-        "SurveyName": {"type": ["string", "null"]},
-        "SurveyStatus": {"type": ["string", "null"]},
-        "Questions": {"type": ["object", "null"]},
-        "Blocks": {"type": ["object", "null"]},
-        "SurveyFlow": {"type": ["object", "null"]},
-        "SurveyOptions": {"type": ["object", "null"]},
-        "Quotas": {"type": ["object", "null"]},
-        "QuotaGroups": {"type": ["object", "null"]},
-        "ResponseSets": {"type": ["object", "null"]},
-        "Scoring": {"type": ["object", "null"]},
-        "ProjectInfo": {"type": ["object", "null"]},
-        "survey_id": {"type": ["string", "null"]},
+        "SurveyID": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "SurveyName": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "SurveyStatus": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "Questions": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "additionalProperties": true
+        },
+        "Blocks": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "additionalProperties": true
+        },
+        "SurveyFlow": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "additionalProperties": true
+        },
+        "SurveyOptions": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "additionalProperties": true
+        },
+        "Quotas": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "additionalProperties": true
+        },
+        "QuotaGroups": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "additionalProperties": true
+        },
+        "ResponseSets": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "additionalProperties": true
+        },
+        "Scoring": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "additionalProperties": true
+        },
+        "ProjectInfo": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "additionalProperties": true
+        },
+        "survey_id": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
         "lastModified": {
-            "type": ["string", "null"],
+            "type": [
+                "null",
+                "string"
+            ],
             "format": "date-time"
         }
     },
-    "patternProperties": {".*": {}}
+    "additionalProperties": true
 }
