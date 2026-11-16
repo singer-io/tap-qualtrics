@@ -1,5 +1,8 @@
 import unittest
 from unittest.mock import patch, MagicMock
+import pytest
+import singer
+from tap_qualtrics.exceptions import QualtricsError
 from tap_qualtrics.streams.abstracts import IncrementalStream
 
 
@@ -44,3 +47,53 @@ class TestIncrementalSync(unittest.TestCase):
         )
         # existing bookmark (2021-06-01) > new value (2020-01-01) → keep existing
         assert result["bookmarks"]["stream_1"]["updated_at"] == "2021-06-01"
+
+
+@pytest.mark.parametrize("current,value,expected", [
+    ("2025-01-01T00:00:00Z", "2024-12-31T23:30:00-01:00", "2024-12-31T23:30:00-01:00"),
+    ("2024-12-31T23:30:00-01:00", "2025-01-01T00:00:00Z", "2024-12-31T23:30:00-01:00"),
+    ("2025-01-01T00:00:00Z", "2025-01-01T00:00:00.000000Z", "2025-01-01T00:00:00Z"),
+])
+def test_bookmark_maximum_uses_chronological_order(current, value, expected):
+    client = MagicMock()
+    client.page_size = 100
+    client.config = {"start_date": "2020-01-01T00:00:00Z"}
+    stream = ConcreteIncrementalStream(client=client)
+    state = {"bookmarks": {"stream_1": {"updated_at": current}}}
+    stream.write_bookmark(state, "stream_1", value=value)
+    assert singer.get_bookmark(state, "stream_1", "updated_at") == expected
+
+
+@pytest.mark.parametrize("record_timestamp", [
+    "2025-01-01T00:00:00.000000Z", "2024-12-31T19:00:00-05:00",
+])
+def test_incremental_filter_includes_equivalent_timestamp(record_timestamp):
+    client = MagicMock()
+    client.page_size = 100
+    client.config = {"start_date": "2020-01-01T00:00:00Z"}
+    client.get.return_value = {"result": {"elements": [
+        {"id": "1", "updated_at": record_timestamp},
+    ]}}
+    stream = ConcreteIncrementalStream(client=client)
+    stream.mdata = {(): {"selected": True}}
+    state = {"bookmarks": {"stream_1": {"updated_at": "2025-01-01T00:00:00Z"}}}
+    transformer = MagicMock()
+    transformer.transform.side_effect = lambda record, *args: record
+    with patch("tap_qualtrics.streams.abstracts.write_record") as write_record:
+        assert stream.sync(state, transformer) == 1
+    write_record.assert_called_once()
+
+
+@pytest.mark.parametrize("state", [
+    [], {"bookmarks": None}, {"bookmarks": []}, {"bookmarks": {"stream_1": []}},
+])
+@pytest.mark.parametrize("operation", ["read", "write"])
+def test_invalid_bookmark_state_is_rejected(state, operation):
+    client = MagicMock()
+    client.page_size = 100
+    stream = ConcreteIncrementalStream(client=client)
+    with pytest.raises(QualtricsError, match="Invalid bookmark state"):
+        if operation == "read":
+            stream.get_bookmark(state, "stream_1")
+        else:
+            stream.write_bookmark(state, "stream_1", value="2025-01-01T00:00:00Z")

@@ -8,6 +8,7 @@ from jsonschema import Draft4Validator, FormatChecker
 from singer import metadata
 
 from tap_qualtrics.discover import discover
+from tap_qualtrics.exceptions import QualtricsError
 from tap_qualtrics.schema import get_schemas
 from tap_qualtrics.streams import STREAMS
 from tap_qualtrics.streams.survey_definitions import SurveyDefinitions
@@ -20,6 +21,14 @@ SURVEY_ID = "SV_1"
 LAST_MODIFIED = "2026-11-04T10:00:00Z"
 PARENT = {"id": SURVEY_ID, "lastModified": LAST_MODIFIED}
 DETAIL_STREAMS = (SurveyDefinitions, SurveyQuestions, SurveyFlows)
+
+
+def _detail_response(stream_cls, survey_id):
+    if stream_cls is SurveyQuestions:
+        return {"result": {"elements": [{"QuestionID": "QID1"}]}}
+    if stream_cls is SurveyDefinitions:
+        return {"result": {"SurveyID": survey_id}}
+    return {"result": {"FlowID": "FL_1", "Type": "Root", "Flow": []}}
 
 
 def _client():
@@ -200,7 +209,7 @@ def test_out_of_order_surveys_and_interrupted_sync_resume(stream_cls):
             return {"result": {"elements": [{"QuestionID": "QID1"}]}}
         if stream_cls is SurveyDefinitions:
             return {"result": {"SurveyID": survey_id}}
-        return {"result": {"FlowID": "FL_1", "Flow": []}}
+        return {"result": {"FlowID": "FL_1", "Type": "Root", "Flow": []}}
 
     client.get.side_effect = get
     catalog = _selected_catalog({stream_cls.tap_stream_id})
@@ -317,3 +326,223 @@ def test_question_choice_shapes_and_order_transform_consistently(choices):
         )
     assert transformed["Choices"] == choices
     assert transformed["ChoiceOrder"] == ["1", "2"]
+
+
+@pytest.mark.parametrize("stream_cls", DETAIL_STREAMS)
+@pytest.mark.parametrize("child_bookmark", [None, "2026-01-01T00:00:00Z"])
+def test_upgrade_backfills_child_without_replaying_parent_or_other_children(
+    stream_cls, child_bookmark
+):
+    client = _client()
+    parents = [
+        {"id": "SV_old", "lastModified": "2026-01-10T00:00:00Z"},
+        {"id": "SV_new", "lastModified": "2026-03-01T00:00:00Z"},
+    ]
+
+    def get(path, **kwargs):
+        if path == "surveys":
+            start = singer.utils.strptime_to_utc(kwargs["params"]["startDate"])
+            return {"result": {"elements": [
+                copy.deepcopy(parent) for parent in parents
+                if singer.utils.strptime_to_utc(parent["lastModified"]) >= start
+            ]}}
+        if path == "surveys/SV_new":
+            return {"result": {
+                "id": "SV_new", "lastModifiedDate": parents[-1]["lastModified"],
+            }}
+        if path.startswith("survey-definitions/"):
+            return _detail_response(stream_cls, path.split("/")[1])
+        raise AssertionError(f"Unexpected request: {path}")
+
+    client.get.side_effect = get
+    state = {"bookmarks": {"surveys": {"lastModified": "2026-02-01T00:00:00Z"}}}
+    if child_bookmark:
+        state["bookmarks"][stream_cls.tap_stream_id] = {"lastModified": child_bookmark}
+    catalog = _selected_catalog({"surveys", "survey", stream_cls.tap_stream_id})
+    with patch("tap_qualtrics.streams.abstracts.write_record") as write_record, \
+            patch("tap_qualtrics.streams.surveys.write_record", new=write_record), \
+            patch("tap_qualtrics.streams.abstracts.write_schema"), \
+            patch("singer.write_state"):
+        sync(client, client.config, catalog, state)
+
+    emitted = {}
+    for args, _ in write_record.call_args_list:
+        emitted.setdefault(args[0], []).append(args[1])
+    assert [record["survey_id"] for record in emitted[stream_cls.tap_stream_id]] == [
+        "SV_old", "SV_new",
+    ]
+    assert [record["id"] for record in emitted["surveys"]] == ["SV_new"]
+    assert [record["id"] for record in emitted["survey"]] == ["SV_new"]
+    client.get.assert_any_call(
+        "surveys", params={
+            "startDate": child_bookmark or client.config["start_date"], "pageSize": 100,
+        },
+    )
+    for stream_id in ("surveys", stream_cls.tap_stream_id):
+        assert singer.utils.strptime_to_utc(
+            state["bookmarks"][stream_id]["lastModified"]
+        ) == singer.utils.strptime_to_utc(parents[-1]["lastModified"])
+
+
+@pytest.mark.parametrize("response", [
+    None, {}, {"result": None}, {"result": {}},
+    {"result": {"elements": None}}, {"result": {"elements": {}}},
+    {"result": {"elements": "invalid"}}, {"result": {"elements": [None]}},
+    {"result": {"elements": [{}]}},
+])
+@pytest.mark.parametrize("later_page", [False, True])
+def test_incomplete_question_response_preserves_all_bookmarks(response, later_page):
+    client = _client()
+    next_page = "https://example.test/questions?page=2"
+    first_page = {"result": {
+        "elements": [{"QuestionID": "QID1"}], "nextPage": next_page,
+    }}
+
+    def get(path, **kwargs):
+        if path == "surveys":
+            return {"result": {"elements": [copy.deepcopy(PARENT)]}}
+        if later_page and not kwargs.get("full_url"):
+            return first_page
+        return response
+
+    client.get.side_effect = get
+    state = {"bookmarks": {
+        "surveys": {"lastModified": "2026-01-01T00:00:00Z"},
+        "survey_questions": {"lastModified": "2026-01-01T00:00:00Z"},
+    }}
+    initial = copy.deepcopy(state["bookmarks"])
+    with patch("tap_qualtrics.streams.abstracts.write_record"), \
+            patch("tap_qualtrics.streams.abstracts.write_schema"), \
+            patch("singer.write_state") as write_state:
+        with pytest.raises(QualtricsError, match="survey_questions"):
+            sync(client, client.config, _selected_catalog({"survey_questions"}), state)
+    assert state["bookmarks"] == initial
+    assert all(call.args[0]["bookmarks"] == initial for call in write_state.call_args_list)
+
+
+@pytest.mark.parametrize("stream_cls", [SurveyDefinitions, SurveyFlows])
+@pytest.mark.parametrize("result", [None, [], {}, "invalid"])
+def test_incomplete_single_record_response_fails(stream_cls, result):
+    client = _client()
+    client.get.return_value = {"result": result}
+    with pytest.raises(QualtricsError, match=stream_cls.tap_stream_id):
+        list(stream_cls(client=client).get_records(PARENT))
+
+
+@pytest.mark.parametrize("timestamp", [
+    "2025-01-01T00:00:00.000000Z",
+    "2024-12-31T19:00:00-05:00",
+    "2025-01-01T01:00:00+01:00",
+])
+def test_equal_timestamp_formats_do_not_skip_survey_questions(timestamp):
+    client = _client()
+    parent = {"id": SURVEY_ID, "lastModified": timestamp}
+    client.get.side_effect = lambda path, **kwargs: (
+        {"result": {"elements": [copy.deepcopy(parent)]}} if path == "surveys"
+        else _detail_response(SurveyQuestions, SURVEY_ID)
+    )
+    bookmark = "2025-01-01T00:00:00Z"
+    state = {"bookmarks": {
+        stream_id: {"lastModified": bookmark}
+        for stream_id in ("surveys", "survey_questions")
+    }}
+    with patch("tap_qualtrics.streams.abstracts.write_record") as write_record, \
+            patch("tap_qualtrics.streams.abstracts.write_schema"), \
+            patch("singer.write_state"):
+        sync(client, client.config, _selected_catalog({"survey_questions"}), state)
+    assert write_record.call_count == 1
+    assert write_record.call_args.args[1]["QuestionID"] == "QID1"
+
+
+def test_multiple_detail_streams_backfill_from_their_own_bookmarks():
+    client = _client()
+    parents = [
+        {"id": "SV_before_start", "lastModified": "2019-01-01T00:00:00Z"},
+        {"id": "SV_old", "lastModified": "2026-01-01T00:00:00Z"},
+        {"id": "SV_middle", "lastModified": "2026-03-01T00:00:00Z"},
+        {"id": "SV_new", "lastModified": "2026-05-01T00:00:00Z"},
+    ]
+
+    def get(path, **kwargs):
+        _ = kwargs
+        if path == "surveys":
+            return {"result": {"elements": copy.deepcopy(parents)}}
+        stream_cls = (
+            SurveyQuestions if path.endswith("/questions") else
+            SurveyFlows if path.endswith("/flow") else SurveyDefinitions
+        )
+        return _detail_response(stream_cls, path.split("/")[1])
+
+    client.get.side_effect = get
+    state = {"bookmarks": {
+        "surveys": {"lastModified": "2026-04-01T00:00:00Z"},
+        "survey_questions": {"lastModified": "2026-02-01T00:00:00Z"},
+        "survey_flows": {"lastModified": "2026-04-01T00:00:00Z"},
+    }}
+    selected = {stream_cls.tap_stream_id for stream_cls in DETAIL_STREAMS}
+    with patch("tap_qualtrics.streams.abstracts.write_record") as write_record, \
+            patch("tap_qualtrics.streams.abstracts.write_schema"), \
+            patch("singer.write_state"):
+        sync(client, client.config, _selected_catalog(selected), state)
+    emitted = {}
+    for args, _ in write_record.call_args_list:
+        emitted.setdefault(args[0], []).append(args[1]["survey_id"])
+    assert emitted == {
+        "survey_definitions": ["SV_old", "SV_middle", "SV_new"],
+        "survey_questions": ["SV_middle", "SV_new"],
+        "survey_flows": ["SV_new"],
+    }
+
+
+@pytest.mark.parametrize("empty_parent_list", [False, True])
+def test_empty_question_backfill_catches_up_to_parent_bookmark(empty_parent_list):
+    client = _client()
+    parent_bookmark = "2026-12-01T00:00:00Z"
+    client.get.side_effect = lambda path, **kwargs: {"result": {
+        "elements": [copy.deepcopy(PARENT)] if path == "surveys" and not empty_parent_list else [],
+    }}
+    state = {"bookmarks": {"surveys": {"lastModified": parent_bookmark}}}
+    with patch("tap_qualtrics.streams.abstracts.write_record") as write_record, \
+            patch("tap_qualtrics.streams.abstracts.write_schema"), \
+            patch("singer.write_state"):
+        sync(client, client.config, _selected_catalog({"survey_questions"}), state)
+    write_record.assert_not_called()
+    assert state["bookmarks"]["surveys"]["lastModified"] == parent_bookmark
+    assert state["bookmarks"]["survey_questions"]["lastModified"] == parent_bookmark
+
+
+def test_failed_historical_backfill_is_replayed_without_advancing_state():
+    client = _client()
+    parents = [
+        {"id": "SV_new", "lastModified": "2026-03-01T00:00:00Z"},
+        {"id": "SV_old", "lastModified": "2026-01-01T00:00:00Z"},
+    ]
+    fail = [True]
+
+    def get(path, **kwargs):
+        _ = kwargs
+        if path == "surveys":
+            return {"result": {"elements": copy.deepcopy(parents)}}
+        if "SV_old" in path and fail[0]:
+            return {"result": {}}
+        return _detail_response(SurveyQuestions, path.split("/")[1])
+
+    client.get.side_effect = get
+    state = {"bookmarks": {"surveys": {"lastModified": "2026-02-01T00:00:00Z"}}}
+    initial = copy.deepcopy(state["bookmarks"])
+    catalog = _selected_catalog({"survey_questions"})
+    with patch("tap_qualtrics.streams.abstracts.write_record") as write_record, \
+            patch("tap_qualtrics.streams.abstracts.write_schema"), \
+            patch("singer.write_state"):
+        with pytest.raises(QualtricsError, match="survey_questions"):
+            sync(client, client.config, catalog, state)
+        assert state["bookmarks"] == initial
+        fail[0] = False
+        write_record.reset_mock()
+        sync(client, client.config, catalog, state)
+    assert [args[1]["survey_id"] for args, _ in write_record.call_args_list] == [
+        "SV_new", "SV_old",
+    ]
+    assert singer.utils.strptime_to_utc(
+        state["bookmarks"]["survey_questions"]["lastModified"]
+    ) == singer.utils.strptime_to_utc(parents[0]["lastModified"])

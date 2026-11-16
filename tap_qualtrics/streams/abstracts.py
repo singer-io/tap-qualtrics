@@ -1,4 +1,5 @@
 ﻿from abc import ABC, abstractmethod
+from datetime import datetime, timezone
 from typing import Any, Dict, Iterator, List, Optional
 
 from singer import (
@@ -7,6 +8,7 @@ from singer import (
     get_logger,
     metadata,
     metrics,
+    utils,
     write_bookmark,
     write_record,
     write_schema,
@@ -20,6 +22,23 @@ from tap_qualtrics.exceptions import (
 )
 
 LOGGER = get_logger()
+
+
+def _bookmark_datetime(value: str) -> datetime:
+    """Treat the empty child-stream bookmark as earlier than any timestamp."""
+    if value == "":
+        return datetime.min.replace(tzinfo=timezone.utc)
+    return utils.strptime_to_utc(value)
+
+
+def _validate_bookmark_state(state: Dict, stream: str) -> None:
+    if isinstance(state, dict):
+        bookmarks = state.get("bookmarks", {})
+        if isinstance(bookmarks, dict) and isinstance(bookmarks.get(stream, {}), dict):
+            return
+    message = f"Invalid bookmark state for stream '{stream}': expected bookmark objects."
+    LOGGER.error(message)
+    raise QualtricsError(message)
 
 
 def _get_nested(data: Any, key_path: str) -> Any:
@@ -48,6 +67,7 @@ class BaseStream(ABC):
     page_size: int = 100
     children: List[str] = []
     parent: Optional[str] = None
+    response_record_fields: Dict[str, type] = {}
 
     def __init__(self, client=None, catalog_entry=None) -> None:
         self.client = client
@@ -133,6 +153,33 @@ class BaseStream(ABC):
     # Pagination                                                           #
     # ------------------------------------------------------------------ #
 
+    def _get_response_records(self, response: Any) -> Any:
+        records = _get_nested(response, self.data_key)
+        if not self.response_record_fields:
+            return records
+
+        expects_list = self.data_key.endswith(".elements")
+        valid = isinstance(records, list if expects_list else dict)
+        if valid:
+            items = records if expects_list else [records]
+            valid = all(
+                isinstance(record, dict) and all(
+                    isinstance(record.get(field), field_type)
+                    for field, field_type in self.response_record_fields.items()
+                )
+                for record in items
+            )
+        if not valid:
+            message = (
+                f"Invalid response for stream '{self.tap_stream_id}': "
+                f"expected '{self.data_key}' to contain "
+                f"{'a list of records' if expects_list else 'a record'} "
+                f"with fields {', '.join(self.response_record_fields)}."
+            )
+            LOGGER.error(message)
+            raise QualtricsError(message)
+        return records
+
     def _paginate(self, path: str, params: Optional[Dict] = None) -> Iterator[Any]:
         """Yield records from a paginated GET endpoint.
 
@@ -149,7 +196,7 @@ class BaseStream(ABC):
                 response = self.client.get(path, full_url=next_url)
             else:
                 response = self.client.get(path, params=params)
-            records = _get_nested(response, self.data_key)
+            records = self._get_response_records(response)
             if isinstance(records, list):
                 yield from records
             elif isinstance(records, dict):
@@ -191,9 +238,10 @@ class IncrementalStream(BaseStream):
     """Base Class for Incremental Stream."""
 
 
-    def get_bookmark(self, state: dict, stream: str, key: Any = None) -> int:
+    def get_bookmark(self, state: dict, stream: str, key: Any = None) -> str:
         """A wrapper for singer.get_bookmark to deal with compatibility for
         bookmark values or start values."""
+        _validate_bookmark_state(state, stream)
         return get_bookmark(
             state,
             stream,
@@ -213,13 +261,14 @@ class IncrementalStream(BaseStream):
         if not (key or self.replication_keys):
             return state
 
+        _validate_bookmark_state(state, stream)
         current_bookmark = get_bookmark(
             state,
             stream,
             key or self.replication_keys[0],
             self.client.config["start_date"],
         )
-        value = max(current_bookmark, value)
+        value = max(current_bookmark, value, key=_bookmark_datetime)
         return write_bookmark(
             state, stream, key or self.replication_keys[0], value
         )
@@ -249,11 +298,11 @@ class IncrementalStream(BaseStream):
                 for record in self.get_records(parent_id, bookmark):
                     transformed = transformer.transform(record, self.schema, self.mdata)
                     record_bk = transformed.get(self.replication_keys[0], "")
-                    if record_bk >= bookmark:
+                    if _bookmark_datetime(record_bk) >= _bookmark_datetime(bookmark):
                         counter.increment()
                         if self.is_selected():
                             write_record(self.tap_stream_id, transformed)
-                        max_bk = max(max_bk, record_bk)
+                        max_bk = max(max_bk, record_bk, key=_bookmark_datetime)
                         for child in self.child_to_sync:
                             child.sync(state=state, transformer=transformer, parent_id=record)
             finally:
@@ -607,11 +656,11 @@ class ChildBaseStream(IncrementalStream):
                     record = self.modify_object(record, parent_id)
                     transformed = transformer.transform(record, self.schema, self.mdata)
                     record_bk = transformed.get(self.replication_keys[0], "")
-                    if record_bk >= bookmark:
+                    if _bookmark_datetime(record_bk) >= _bookmark_datetime(bookmark):
                         counter.increment()
                         if self.is_selected():
                             write_record(self.tap_stream_id, transformed)
-                        max_bk = max(max_bk, record_bk)
+                        max_bk = max(max_bk, record_bk, key=_bookmark_datetime)
                         for child in self.child_to_sync:
                             child.sync(state=state, transformer=transformer, parent_id=record)
             finally:

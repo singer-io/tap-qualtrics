@@ -7,5 +7,6 @@ class SurveyQuestions(IncrementalSurveyChildStream):
     replication_method = "INCREMENTAL"
     replication_keys = ["lastModified"]
     data_key = "result.elements"
+    response_record_fields = {"QuestionID": str}
     path = "survey-definitions/{survey_id}/questions"
     parent = "surveys"

@@ -215,21 +215,26 @@ This tap:
 - Selecting translations automatically traverses surveys and languages, even when those
   streams are not selected for output.
 
-These survey child streams follow the surveys bookmark and only fetch surveys that pass
-the parent's incremental filter. Each record carries the survey's `lastModified`, and each
-stream maintains its own bookmark using the existing child-stream implementation.
+Each survey child record carries the survey's `lastModified`, and each stream maintains
+its own bookmark.
 Changes are detected through the parent survey's modification timestamp, not separate
 timestamps supplied by these endpoints.
-When definitions, questions, or flows are selected, survey traversal commits its
-bookmarks only after all surveys succeed. A failed traversal is replayed on the next
-run, so records already emitted during that traversal may be emitted again.
-If an earlier version of these streams missed records, clear the affected stream and
-`surveys` bookmarks, or backfill with fresh state, to recover them.
-Re-run discovery to refresh replication metadata. When adding these streams to a pipeline
-with existing bookmarks, clear the bookmarks for the streams being backfilled and all
-their ancestors, or run a separate initial sync with fresh state to backfill older surveys.
+When definitions, questions, or flows are selected, survey traversal starts at the earliest
+bookmark among `surveys` and those selected detail streams. A detail stream with no bookmark
+automatically backfills from `start_date`, even when `surveys` already has a newer bookmark.
+Each detail stream uses its own starting bookmark; historical backfill does not replay
+parent records or unrelated child streams. Set `start_date` early enough for the backfill.
+Bookmarks commit only after the entire traversal succeeds. Missing or malformed detail
+responses fail the traversal; an explicit empty questions list is valid. A failed traversal
+is replayed on the next run, so records already emitted may be emitted again.
+If an earlier version missed records, clear the affected detail stream's bookmark to
+backfill it; resetting the `surveys` bookmark is not necessary for these three streams.
+
+Re-run discovery to refresh replication metadata. Other survey child streams still follow
+the parent's incremental filter. When adding versions, options, languages, or translations
+to a pipeline with existing bookmarks, clear the bookmarks for the streams being backfilled
+and all their ancestors, or run a separate initial sync with fresh state.
 For translations, clear `survey_translations`, `survey_languages`, and `surveys` bookmarks.
-Set `start_date` early enough to include the surveys being backfilled.
 
 ### Test Results
 
@@ -237,7 +242,7 @@ Latest local unit-test run:
 
 ```text
 Command: python3 -m pytest -q tests/unittests
-Result: 570 passed, 2 subtests passed
+Result: 622 passed, 2 subtests passed
 ```
 
 ### Dynamic Export Discovery
