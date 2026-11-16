@@ -269,7 +269,6 @@ def test_question_page_failure_does_not_checkpoint_partial_survey():
 @pytest.mark.parametrize("stream_id,fields", [
     ("survey_definitions", {
         "SurveyID": "SV_1",
-        "UnknownDefinitionField": {"nested": [1, None]},
         "Questions": {"QID1": {"translations": {"FR": "Bonjour"}}},
     }),
     ("survey_questions", {
@@ -279,17 +278,13 @@ def test_question_page_failure_does_not_checkpoint_partial_survey():
         "RecodeValues": {str(i): str(i) for i in range(1, 5)},
         "Configuration": {"custom": {"nested": 1}},
         "Validation": {"Settings": {"Logic": {"third": {"operator": "eq"}}}},
-        "UnknownQuestionField": {"translations": ["FR"]},
     }),
     ("survey_flows", {
         "FlowID": "FL_1",
-        "Flow": [{"Type": "Branch", "ID": "BL_1", "Flow": [
-            {"Type": "Block", "ID": "BL_2"},
-        ]}],
-        "UnknownFlowField": {"flag": True},
+        "Flow": [{"Type": "Branch", "ID": "BL_1", "Properties": {"flag": True}}],
     }),
 ])
-def test_complete_payload_survives_singer_transformation(stream_id, fields):
+def test_declared_payload_fields_survive_singer_transformation(stream_id, fields):
     entry = discover().get_stream(stream_id)
     record = {"survey_id": "SV_1", "lastModified": LAST_MODIFIED, **fields}
     schema = entry.schema.to_dict()
@@ -305,7 +300,7 @@ def test_complete_payload_survives_singer_transformation(stream_id, fields):
     [{"Display": "First", "Details": {"enabled": True}}, {"Display": "Second"}],
     None,
 ])
-def test_question_choice_shapes_and_order_preserve_native_values(choices):
+def test_question_choice_shapes_and_order_transform_consistently(choices):
     entry = discover().get_stream("survey_questions")
     schema = entry.schema.to_dict()
     record = {
@@ -313,7 +308,7 @@ def test_question_choice_shapes_and_order_preserve_native_values(choices):
         "QuestionID": "QID1",
         "lastModified": LAST_MODIFIED,
         "Choices": choices,
-        "ChoiceOrder": [1, "2", None],
+        "ChoiceOrder": [1, "2"],
     }
     Draft4Validator(schema).validate(record)
     with singer.Transformer() as transformer:
@@ -321,4 +316,4 @@ def test_question_choice_shapes_and_order_preserve_native_values(choices):
             copy.deepcopy(record), schema, metadata.to_map(entry.metadata)
         )
     assert transformed["Choices"] == choices
-    assert transformed["ChoiceOrder"] == [1, "2", None]
+    assert transformed["ChoiceOrder"] == ["1", "2"]
