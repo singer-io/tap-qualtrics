@@ -298,3 +298,27 @@ def test_complete_payload_survives_singer_transformation(stream_id, fields):
     for key, value in fields.items():
         assert transformed[key] == value
     Draft4Validator(schema, format_checker=FormatChecker()).validate(transformed)
+
+
+@pytest.mark.parametrize("choices", [
+    {"1": {"Display": "First"}, "2": {"Display": "Second"}},
+    [{"Display": "First", "Details": {"enabled": True}}, {"Display": "Second"}],
+    None,
+])
+def test_question_choice_shapes_and_order_preserve_native_values(choices):
+    entry = discover().get_stream("survey_questions")
+    schema = entry.schema.to_dict()
+    record = {
+        "survey_id": "SV_1",
+        "QuestionID": "QID1",
+        "lastModified": LAST_MODIFIED,
+        "Choices": choices,
+        "ChoiceOrder": [1, "2", None],
+    }
+    Draft4Validator(schema).validate(record)
+    with singer.Transformer() as transformer:
+        transformed = transformer.transform(
+            copy.deepcopy(record), schema, metadata.to_map(entry.metadata)
+        )
+    assert transformed["Choices"] == choices
+    assert transformed["ChoiceOrder"] == [1, "2", None]

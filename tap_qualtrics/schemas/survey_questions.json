@@ -11,11 +11,13 @@
         "QuestionDescription": {"type": ["null", "string"]},
         "ChoiceOrder": {
             "type": ["null", "array"],
-            "items": {"type": ["null", "string"]}
+            "items": {},
+            "description": "Choice IDs can be strings or integers; preserve their original types."
         },
         "Choices": {
-            "type": ["null", "object"],
-            "patternProperties": {".*": {"type": ["null", "object"]}}
+            "type": ["null", "object", "array"],
+            "patternProperties": {".*": {"type": ["null", "object"]}},
+            "items": {"type": ["null", "object"]}
         },
         "RecodeValues": {
             "type": ["null", "object"],
