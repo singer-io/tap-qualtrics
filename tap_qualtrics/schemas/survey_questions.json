@@ -67,11 +67,46 @@
                 "object",
                 "array"
             ],
-            "additionalProperties": {
+            "patternProperties": {
+                ".*": {
+                    "type": [
+                        "null",
+                        "object"
+                    ]
+                }
+            },
+            "items": {
                 "type": [
                     "null",
                     "object"
                 ]
+            }
+        },
+        "AnswerOrder": {
+            "type": [
+                "null",
+                "array"
+            ],
+            "items": {
+                "type": [
+                    "string",
+                    "integer"
+                ]
+            }
+        },
+        "Answers": {
+            "type": [
+                "null",
+                "object",
+                "array"
+            ],
+            "patternProperties": {
+                ".*": {
+                    "type": [
+                        "null",
+                        "object"
+                    ]
+                }
             },
             "items": {
                 "type": [
@@ -85,26 +120,26 @@
                 "null",
                 "object"
             ],
-            "additionalProperties": {
-                "type": [
-                    "null",
-                    "string"
-                ]
+            "patternProperties": {
+                ".*": {
+                    "type": [
+                        "null",
+                        "string"
+                    ]
+                }
             }
         },
         "Configuration": {
             "type": [
                 "null",
                 "object"
-            ],
-            "additionalProperties": true
+            ]
         },
         "Validation": {
             "type": [
                 "null",
                 "object"
-            ],
-            "additionalProperties": true
+            ]
         },
         "Language": {
             "type": [
@@ -114,6 +149,9 @@
             ],
             "items": {
                 "type": "string"
+            },
+            "patternProperties": {
+                ".*": {}
             }
         },
         "NextAnswerId": {
@@ -133,7 +171,10 @@
                 "null",
                 "string",
                 "object"
-            ]
+            ],
+            "patternProperties": {
+                ".*": {}
+            }
         },
         "lastModified": {
             "type": [
@@ -143,5 +184,7 @@
             "format": "date-time"
         }
     },
-    "additionalProperties": true
+    "patternProperties": {
+        ".*": {}
+    }
 }

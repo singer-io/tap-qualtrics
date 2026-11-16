@@ -1,6 +1,12 @@
 {
     "type": "object",
     "properties": {
+        "QuestionCount": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
         "SurveyID": {
             "type": [
                 "null",
@@ -19,68 +25,119 @@
                 "string"
             ]
         },
-        "Questions": {
+        "LastModified": {
             "type": [
                 "null",
-                "object"
+                "string"
             ],
-            "additionalProperties": true
+            "format": "date-time"
         },
-        "Blocks": {
+        "BrandID": {
             "type": [
                 "null",
-                "object"
-            ],
-            "additionalProperties": true
+                "string"
+            ]
         },
-        "SurveyFlow": {
+        "OwnerID": {
             "type": [
                 "null",
-                "object"
+                "string"
+            ]
+        },
+        "DivisionID": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "LastAccessed": {
+            "type": [
+                "null",
+                "string"
             ],
-            "additionalProperties": true
+            "format": "date-time"
+        },
+        "CreatorID": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "LastActivated": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
         },
         "SurveyOptions": {
             "type": [
                 "null",
                 "object"
-            ],
-            "additionalProperties": true
+            ]
         },
-        "Quotas": {
+        "Questions": {
             "type": [
                 "null",
                 "object"
-            ],
-            "additionalProperties": true
+            ]
         },
-        "QuotaGroups": {
+        "Blocks": {
             "type": [
                 "null",
                 "object"
-            ],
-            "additionalProperties": true
+            ]
         },
         "ResponseSets": {
             "type": [
                 "null",
                 "object"
+            ]
+        },
+        "SurveyFlow": {
+            "type": [
+                "null",
+                "object"
+            ]
+        },
+        "Quotas": {
+            "type": [
+                "null",
+                "object"
+            ]
+        },
+        "QuotaGroups": {
+            "type": [
+                "null",
+                "object"
+            ]
+        },
+        "QuotaGroupOrder": {
+            "type": [
+                "null",
+                "array"
             ],
-            "additionalProperties": true
+            "items": {
+                "type": "string"
+            }
         },
         "Scoring": {
             "type": [
                 "null",
                 "object"
-            ],
-            "additionalProperties": true
+            ]
         },
         "ProjectInfo": {
             "type": [
                 "null",
                 "object"
-            ],
-            "additionalProperties": true
+            ]
+        },
+        "BrandBaseURL": {
+            "type": [
+                "null",
+                "string"
+            ]
         },
         "survey_id": {
             "type": [
@@ -96,5 +153,7 @@
             "format": "date-time"
         }
     },
-    "additionalProperties": true
+    "patternProperties": {
+        ".*": {}
+    }
 }

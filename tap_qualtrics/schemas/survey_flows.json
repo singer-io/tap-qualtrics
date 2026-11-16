@@ -32,7 +32,9 @@
                     ]
                 }
             },
-            "additionalProperties": true
+            "patternProperties": {
+                ".*": {}
+            }
         },
         "Flow": {
             "type": [
@@ -64,11 +66,42 @@
                         "type": [
                             "null",
                             "object"
+                        ]
+                    },
+                    "Flow": {
+                        "type": [
+                            "null",
+                            "array"
                         ],
-                        "additionalProperties": true
+                        "items": {
+                            "type": "object",
+                            "patternProperties": {
+                                ".*": {}
+                            }
+                        }
+                    },
+                    "BranchLogic": {
+                        "type": [
+                            "null",
+                            "object"
+                        ]
+                    },
+                    "EmbeddedData": {
+                        "type": [
+                            "null",
+                            "array"
+                        ],
+                        "items": {
+                            "type": "object",
+                            "patternProperties": {
+                                ".*": {}
+                            }
+                        }
                     }
                 },
-                "additionalProperties": true
+                "patternProperties": {
+                    ".*": {}
+                }
             }
         },
         "lastModified": {
@@ -79,5 +112,7 @@
             "format": "date-time"
         }
     },
-    "additionalProperties": true
+    "patternProperties": {
+        ".*": {}
+    }
 }
