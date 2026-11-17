@@ -168,6 +168,41 @@ class TestSurveyResponseExportSync(unittest.TestCase):
 
 class TestSurveyResponseExportDiscover(unittest.TestCase):
 
+    @patch("tap_qualtrics.streams.survey_response_export.LOGGER")
+    @patch("tap_qualtrics.streams.survey_response_export.ThreadPoolExecutor")
+    def test_discovery_logs_total_before_starting_export_workers(self, mock_executor, logger):
+        for total_surveys in (0, 132, 2500):
+            with self.subTest(total_surveys=total_surveys):
+                client = _make_client()
+                surveys = [{"id": f"SV_{index}"} for index in range(total_surveys)]
+                client.get.side_effect = [
+                    {"result": {
+                        "elements": surveys[:100],
+                        "nextPage": "https://qualtrics.example.com/surveys?page=2",
+                    }},
+                    {"result": {"elements": surveys[100:] + surveys[:1], "nextPage": None}},
+                ]
+                logger.reset_mock()
+                executor = MagicMock()
+                executor.__enter__.return_value = executor
+                executor.map.return_value = []
+
+                def start_workers(**kwargs):
+                    self.assertEqual(client.get.call_count, 2)
+                    client.post.assert_not_called()
+                    logger.info.assert_called_once_with(
+                        "Survey response export discovery: listed %d unique survey(s) across "
+                        "%d page(s); preparing one sample export per survey with at most %d "
+                        "concurrent workers and %d records per sample. Retries may create "
+                        "additional jobs. Qualtrics has no documented cancel/delete endpoint "
+                        "for these jobs; large accounts may take longer and consume more API quota.",
+                        total_surveys, 2, min(4, total_surveys), 50,
+                    )
+                    return executor
+
+                mock_executor.side_effect = start_workers
+                SurveyResponseExport.discover_dynamic_entries(client)
+
     @patch("tap_qualtrics.streams.survey_response_export.ThreadPoolExecutor")
     def test_discovery_uses_thread_pool(self, mock_executor):
         client = _make_client()
