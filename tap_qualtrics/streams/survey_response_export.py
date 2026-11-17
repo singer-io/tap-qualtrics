@@ -89,7 +89,7 @@ class SurveyResponseExport(IncrementalStream):
                 raise QualtricsPaginationError(
                     "GET /surveys returned 403 during discovery after {} page(s); refusing "
                     "to continue with a partial survey listing.".format(page_count)
-                )
+                ) from exc
             page_count += 1
             result = surveys_resp.get("result") or {}
             page_elements = result.get("elements") or []
