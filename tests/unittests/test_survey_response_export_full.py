@@ -378,11 +378,11 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
         second_call = client.get.call_args_list[1]
         self.assertEqual(second_call.kwargs.get("full_url"), page_one["result"]["nextPage"])
 
-    @patch("tap_qualtrics.streams.survey_response_export.LOGGER")
-    def test_forbidden_on_later_page_keeps_earlier_surveys(self, mock_logger):
-        """A 403 on page 2+ must not discard surveys already collected from earlier pages,
-        but the truncation has to be logged so it isn't mistaken for 'account only has this
-        many surveys'."""
+    def test_forbidden_on_later_page_raises_instead_of_partial_catalog(self):
+        """A 403 on page 2+ must fail discovery because continuing would silently emit
+        a partial catalog and drop all surveys after the failing page."""
+        from tap_qualtrics.exceptions import QualtricsPaginationError
+
         client = _make_client()
         page_one = {
             "result": {
@@ -405,12 +405,8 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
         ).encode()
         client.get_file.return_value = file_resp
 
-        entries, skipped = SurveyResponseExport.discover_dynamic_entries(client)
-
-        self.assertEqual(len(entries), 1)
-        self.assertEqual(entries[0][0], "survey_response_export__SV_1")
-        self.assertEqual(skipped, [])
-        mock_logger.warning.assert_called_once()
+        with self.assertRaises(QualtricsPaginationError):
+            SurveyResponseExport.discover_dynamic_entries(client)
 
     def test_discovery_completes_with_many_pages(self):
         """Regression test for page_size=1 with 1,001 surveys: previously a fixed max_pages
@@ -465,6 +461,22 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
             return {"result": {"elements": [{"id": "SV_1"}], "nextPage": looping_url}}
 
         client.get.side_effect = get_side_effect
+
+        with self.assertRaises(QualtricsPaginationError):
+            SurveyResponseExport.discover_dynamic_entries(client)
+
+    def test_non_string_next_page_raises(self):
+        """nextPage must be either a URL string or null; other truthy types must fail
+        discovery explicitly rather than being passed to full_url handling."""
+        from tap_qualtrics.exceptions import QualtricsPaginationError
+
+        client = _make_client()
+        client.get.return_value = {
+            "result": {
+                "elements": [{"id": "SV_1"}],
+                "nextPage": {"unexpected": "object"},
+            }
+        }
 
         with self.assertRaises(QualtricsPaginationError):
             SurveyResponseExport.discover_dynamic_entries(client)

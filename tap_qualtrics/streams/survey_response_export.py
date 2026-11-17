@@ -57,22 +57,7 @@ class SurveyResponseExport(IncrementalStream):
                 return client.fork()
             return client
 
-        # GET /surveys is paginated (result.nextPage); discovery must walk every page the
-        # same way the `surveys` stream itself does (see Surveys/BaseStream._paginate), or
-        # any survey past the first page is silently never considered for a response export
-        # dataset - with no log line distinguishing it from a survey skipped on purpose.
-        #
-        # This must run to actual completion (every page, however many there are) rather than
-        # stopping at an arbitrary page count: a cap that silently returns whatever was
-        # gathered so far is itself the same class of bug as not paginating at all - it just
-        # moves the cut-off point instead of removing it, and a legitimate large account (or a
-        # config with a small page_size) could still exceed any fixed cap despite nothing
-        # being wrong. A long-running sync is already independently bounded by the tap's
-        # overall execution time limit, so pagination here is guarded by safeguards that
-        # target real failure signatures instead of page count: a repeated cursor (the exact
-        # same nextPage URL answered twice) and lack of forward progress (consecutive pages
-        # that contribute no not-yet-seen survey id) - see the loop-safety and
-        # record-completeness requirements in copilot-instructions.md.
+        # Discovery must follow every surveys page and fail only on stuck pagination signals to avoid silent data loss.
         page_size = getattr(client, "page_size", None) or 100
         unique_survey_ids = []
         seen_survey_ids = set()
@@ -99,15 +84,12 @@ class SurveyResponseExport(IncrementalStream):
                 if page_count == 0:
                     LOGGER.warning("Cannot list surveys during discovery: %s", exc)
                     return [], []
-                # Already have at least one page; surface what was gathered rather than
-                # discarding it, but make the truncation visible instead of silent.
-                LOGGER.warning(
-                    "Cannot list further survey pages during discovery after %d page(s): %s. "
-                    "Discovery will proceed with only the surveys already listed.",
-                    page_count, exc,
+                # A 403 after at least one successful page means pagination stopped before
+                # completion; failing here prevents silently emitting a partial catalog.
+                raise QualtricsPaginationError(
+                    "GET /surveys returned 403 during discovery after {} page(s); refusing "
+                    "to continue with a partial survey listing.".format(page_count)
                 )
-                has_more_pages = False
-                break
             page_count += 1
             result = surveys_resp.get("result") or {}
             page_elements = result.get("elements") or []
@@ -121,6 +103,11 @@ class SurveyResponseExport(IncrementalStream):
                     new_ids_this_page += 1
 
             next_url = result.get("nextPage")
+            if next_url is not None and not isinstance(next_url, str):
+                raise QualtricsPaginationError(
+                    "GET /surveys returned invalid nextPage type {} during discovery after {} "
+                    "page(s); expected a URL string or null.".format(type(next_url).__name__, page_count)
+                )
             has_more_pages = bool(next_url)
 
             if new_ids_this_page == 0 and has_more_pages:
