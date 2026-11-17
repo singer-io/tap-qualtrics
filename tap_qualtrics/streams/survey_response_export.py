@@ -133,6 +133,18 @@ class SurveyResponseExport(IncrementalStream):
                     "so far.", page_count, len(seen_survey_ids),
                 )
 
+        LOGGER.info(
+            "Survey response export discovery: listed %d unique survey(s) across "
+            "%d page(s); preparing one sample export per survey with at most %d "
+            "concurrent workers and %d records per sample. Retries may create "
+            "additional jobs. Qualtrics has no documented cancel/delete endpoint "
+            "for these jobs; large accounts may take longer and consume more API quota.",
+            len(unique_survey_ids),
+            page_count,
+            min(DISCOVERY_MAX_WORKERS, len(unique_survey_ids)),
+            DISCOVERY_EXPORT_LIMIT,
+        )
+
         # Qualtrics has no documented cancel/delete endpoint for these export jobs.
         # Discovery therefore creates provider-managed jobs solely to infer
         # per-survey schemas. This side effect is unavoidable provider behavior.
