@@ -85,8 +85,6 @@ def get_schemas() -> Tuple[Dict, Dict]:
 
     refs = load_schema_references()
     for stream_name, stream_obj in STREAMS.items():
-        if getattr(stream_obj, "dynamic_schema", False):
-            continue  # catalog entries built at runtime via discover_dynamic_entries()
         schema_path = get_abs_path(f"schemas/{stream_name}.json")
         with open(schema_path, encoding="utf-8") as file:
             schema = json.load(file)

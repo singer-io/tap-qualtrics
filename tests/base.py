@@ -180,13 +180,6 @@ class QualtricsBaseTest(BaseCase):
                 cls.OBEYS_START_DATE: False,
                 cls.API_LIMIT: 100
             },
-            "sample_definitions": {
-                cls.PRIMARY_KEYS: {"sampleDefinitionId"},
-                cls.REPLICATION_METHOD: cls.FULL_TABLE,
-                cls.REPLICATION_KEYS: set(),
-                cls.OBEYS_START_DATE: False,
-                cls.API_LIMIT: 10
-            },
             "mailing_lists": {
                 cls.PRIMARY_KEYS: {"mailingListId"},
                 cls.REPLICATION_METHOD: cls.INCREMENTAL,
@@ -394,8 +387,8 @@ class QualtricsBaseTest(BaseCase):
 
 
 
-    # Five reliably-accessible streams covering FULL_TABLE and INCREMENTAL types.
-    _STREAMS_FOR_TESTING = {
+    # Fast PR gate: small, stable coverage across FULL_TABLE and INCREMENTAL.
+    _STREAMS_FOR_TESTING_PR = {
         'users',
         'groups',
         'tickets',
@@ -403,19 +396,106 @@ class QualtricsBaseTest(BaseCase):
         'mailing_lists',
     }
 
+    # Nightly tier: broader coverage for higher confidence and cross-domain behavior.
+    _STREAMS_FOR_TESTING_NIGHTLY = {
+        'users',
+        'groups',
+        'tickets',
+        'surveys',
+        'mailing_lists',
+        'audit_events_types',
+        'libraries',
+        'directories',
+        'mailing_list_contacts',
+        'segments',
+        'survey_definitions',
+        'survey_questions',
+        'survey_response_export',
+        'distributions',
+        'erasure_requests',
+    }
+
+    _TEST_STREAM_TIERS = {
+        'pr': _STREAMS_FOR_TESTING_PR,
+        'nightly': _STREAMS_FOR_TESTING_NIGHTLY,
+    }
+
+    @classmethod
+    def stream_test_tier(cls):
+        return os.getenv("TAP_QUALTRICS_TEST_STREAM_TIER", "pr").strip().lower()
+
+    @classmethod
+    def stream_exclusion_reasons(cls):
+        """Streams excluded for account/entitlement reasons across suites."""
+        return {
+            'tickets': 'Shared integration account has restricted ticketing access in this environment.',
+            'ticket_groups': 'Shared integration account has restricted ticketing access in this environment.',
+            'ticket_statuses': 'Shared integration account has restricted ticketing access in this environment.',
+            'ticket_teams': 'Shared integration account has restricted ticketing access in this environment.',
+            'ticket_root_causes': 'Shared integration account has restricted ticketing access in this environment.',
+            'ticket_retrieve_events': 'Shared integration account has restricted ticketing access in this environment.',
+        }
+
+    @classmethod
+    def apply_stream_exclusions(cls, streams, exclusions):
+        missing_reasons = {stream for stream, reason in exclusions.items() if not reason}
+        if missing_reasons:
+            raise AssertionError(
+                "Every excluded stream must include a non-empty reason: {}".format(
+                    sorted(missing_reasons)
+                )
+            )
+        unknown_streams = set(exclusions).difference(streams)
+        if unknown_streams:
+            raise AssertionError(
+                "Exclusions reference streams outside the selected set: {}".format(
+                    sorted(unknown_streams)
+                )
+            )
+        return set(streams).difference(exclusions)
+
     @classmethod
     def expected_stream_names(cls):
-        return cls._STREAMS_FOR_TESTING
+        tier = cls.stream_test_tier()
+        if tier not in cls._TEST_STREAM_TIERS:
+            raise ValueError(
+                "Unsupported TAP_QUALTRICS_TEST_STREAM_TIER '{}'. Expected one of: {}".format(
+                    tier, sorted(cls._TEST_STREAM_TIERS)
+                )
+            )
+
+        selected = set(cls._TEST_STREAM_TIERS[tier])
+        exclusions = {
+            stream: reason
+            for stream, reason in cls.stream_exclusion_reasons().items()
+            if stream in selected
+        }
+        return cls.apply_stream_exclusions(selected, exclusions)
 
     @staticmethod
     def get_credentials():
         """Authentication information for the test account."""
         credentials_dict = {}
-        creds = {'client_id': 'TAP_QUALTRICS_CLIENT_ID', 'client_secret': 'TAP_QUALTRICS_CLIENT_SECRET',
-                 'scope': 'TAP_QUALTRICS_SCOPE', 'auth_method': 'TAP_QUALTRICS_GRANT_TYPE', 'data_center': 'TAP_QUALTRICS_DATA_CENTER'}
+        creds = {
+            'client_id': 'TAP_QUALTRICS_CLIENT_ID',
+            'client_secret': 'TAP_QUALTRICS_CLIENT_SECRET',
+            'scope': 'TAP_QUALTRICS_SCOPE',
+            'auth_method': 'TAP_QUALTRICS_GRANT_TYPE',
+            'data_center': 'TAP_QUALTRICS_DATA_CENTER',
+            'access_token': 'TAP_QUALTRICS_ACCESS_TOKEN',
+            'refresh_token': 'TAP_QUALTRICS_REFRESH_TOKEN',
+            'redirect_uri': 'TAP_QUALTRICS_REDIRECT_URI',
+        }
 
         for cred in creds:
             credentials_dict[cred] = os.getenv(creds[cred])
+
+        overrides = getattr(QualtricsBaseTest, "_credential_overrides", None) or {}
+        for key, value in overrides.items():
+            if value is None:
+                credentials_dict.pop(key, None)
+            else:
+                credentials_dict[key] = value
 
         return credentials_dict
 
@@ -424,11 +504,29 @@ class QualtricsBaseTest(BaseCase):
         return_value = {
             "start_date": self.start_date
         }
+
+        overrides = getattr(self, "_property_overrides", None) or {}
+        for key, value in overrides.items():
+            if value is None:
+                return_value.pop(key, None)
+            else:
+                return_value[key] = value
+
         if original:
             return return_value
 
         return_value["start_date"] = self.start_date
         return return_value
+
+    @classmethod
+    def set_test_config_overrides(cls, credential_overrides=None, property_overrides=None):
+        cls._credential_overrides = credential_overrides or {}
+        cls._property_overrides = property_overrides or {}
+
+    @classmethod
+    def clear_test_config_overrides(cls):
+        cls._credential_overrides = {}
+        cls._property_overrides = {}
 
     def run_and_verify_check_mode(self, conn_id):
         """Override to filter discovered catalog to the selected test streams."""

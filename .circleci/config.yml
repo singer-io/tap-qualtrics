@@ -30,13 +30,43 @@ jobs:
             source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
             uv pip install pytest coverage
             mkdir -p test_output
-            coverage run -m pytest tests/unittests --junitxml=test_output/report.xml
+            coverage run --branch -m pytest tests/unittests --junitxml=test_output/report.xml
       - run:
           name: 'Coverage Report'
           command: |
             source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
             coverage report -m --fail-under=99 | tee coverage.txt
             coverage html
+      - run:
+          name: "Mutation Tests (optional)"
+          command: |
+            source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
+            if [ "${RUN_MUTATION_TESTS:-0}" = "1" ]; then
+              uv pip install mutmut
+              chmod +x scripts/run_mutation_tests.sh
+              ./scripts/run_mutation_tests.sh
+            else
+              echo "Skipping mutation tests (set RUN_MUTATION_TESTS=1 to enable)."
+            fi
+      - run:
+          name: "Contract Replay Tests (offline fixtures)"
+          command: |
+            source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
+            ENFORCE_CONTRACT_FIXTURE_COVERAGE=${ENFORCE_CONTRACT_FIXTURE_COVERAGE:-0} \
+              python -m pytest tests/contracts/test_stream_contract_replay.py -q
+      - run:
+          name: "Live Schema Contract Check (nightly optional)"
+          command: |
+            source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
+            if [ "${RUN_LIVE_SCHEMA_CONTRACT:-0}" = "1" ]; then
+              if [ -z "${QUALTRICS_CONTRACT_CONFIG:-}" ]; then
+                echo "QUALTRICS_CONTRACT_CONFIG must be set when RUN_LIVE_SCHEMA_CONTRACT=1"
+                exit 1
+              fi
+              python -m pytest tests/contracts/test_live_schema_contract.py -q -m live_contract
+            else
+              echo "Skipping live schema contract check (set RUN_LIVE_SCHEMA_CONTRACT=1 to enable)."
+            fi
       - store_test_results:
           path: test_output/report.xml
       - store_artifacts:
@@ -71,3 +101,6 @@ workflows:
     jobs:
       - build:
           context: circleci-user
+          environment:
+            RUN_LIVE_SCHEMA_CONTRACT: "1"
+            ENFORCE_CONTRACT_FIXTURE_COVERAGE: "1"

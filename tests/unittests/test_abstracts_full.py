@@ -375,6 +375,128 @@ class TestIncrementalStream(unittest.TestCase):
         stream.sync(state={}, transformer=transformer)
         child.sync.assert_called_once()
 
+    @patch("tap_qualtrics.streams.abstracts.write_record")
+    @patch("tap_qualtrics.streams.abstracts.get_bookmark", return_value="2021-01-01")
+    @patch("tap_qualtrics.streams.abstracts.BaseStream.is_selected", return_value=True)
+    def test_sync_failure_mid_stream_writes_last_successful_bookmark(self, _, _bk, mock_wr):
+        stream = self._stream()
+        records = iter([
+            {"id": 1, "updated_at": "2021-06-01"},
+            RuntimeError("mid-stream failure"),
+        ])
+
+        def failing_records(*_args, **_kwargs):
+            for item in records:
+                if isinstance(item, Exception):
+                    raise item
+                yield item
+
+        stream.get_records = failing_records
+        transformer = MagicMock()
+        transformer.transform.side_effect = lambda r, *a, **kw: r
+        state = {}
+
+        with self.assertRaises(RuntimeError):
+            stream.sync(state=state, transformer=transformer)
+
+        self.assertEqual(state["bookmarks"]["incr_test"]["updated_at"], "2021-06-01")
+        mock_wr.assert_called_once()
+
+    @patch("tap_qualtrics.streams.abstracts.write_record")
+    @patch("tap_qualtrics.streams.abstracts.get_bookmark", return_value="1900-01-01T00:00:00Z")
+    @patch("tap_qualtrics.streams.abstracts.BaseStream.is_selected", return_value=True)
+    def test_sync_with_far_past_bookmark(self, _, _bk, mock_wr):
+        stream = self._stream()
+        stream.client.get.return_value = {
+            "result": {
+                "elements": [
+                    {"id": 1, "updated_at": "2021-01-01T00:00:00Z"},
+                    {"id": 2, "updated_at": "2021-01-02T00:00:00Z"},
+                ],
+                "nextPage": None,
+            }
+        }
+        transformer = MagicMock()
+        transformer.transform.side_effect = lambda r, *a, **kw: r
+
+        count = stream.sync(state={}, transformer=transformer)
+
+        self.assertEqual(count, 2)
+        self.assertEqual(mock_wr.call_count, 2)
+
+    @patch("tap_qualtrics.streams.abstracts.write_record")
+    @patch("tap_qualtrics.streams.abstracts.get_bookmark", return_value="2999-01-01T00:00:00Z")
+    @patch("tap_qualtrics.streams.abstracts.BaseStream.is_selected", return_value=True)
+    def test_sync_with_far_future_bookmark_no_crash(self, _, _bk, mock_wr):
+        stream = self._stream()
+        stream.client.get.return_value = {
+            "result": {
+                "elements": [{"id": 1, "updated_at": "2021-01-01T00:00:00Z"}],
+                "nextPage": None,
+            }
+        }
+        transformer = MagicMock()
+        transformer.transform.side_effect = lambda r, *a, **kw: r
+        state = {}
+
+        count = stream.sync(state=state, transformer=transformer)
+
+        self.assertEqual(count, 0)
+        mock_wr.assert_not_called()
+        self.assertEqual(state["bookmarks"]["incr_test"]["updated_at"], "2999-01-01T00:00:00Z")
+
+    @patch("tap_qualtrics.streams.abstracts.write_record")
+    @patch("tap_qualtrics.streams.abstracts.get_bookmark", return_value="2999-01-01T00:00:00Z")
+    @patch("tap_qualtrics.streams.abstracts.BaseStream.is_selected", return_value=True)
+    def test_start_date_later_than_all_data_returns_zero(self, _, _bk, mock_wr):
+        stream = self._stream()
+        stream.client.get.return_value = {
+            "result": {
+                "elements": [
+                    {"id": 1, "updated_at": "2021-01-01T00:00:00Z"},
+                    {"id": 2, "updated_at": "2021-01-02T00:00:00Z"},
+                ],
+                "nextPage": None,
+            }
+        }
+        transformer = MagicMock()
+        transformer.transform.side_effect = lambda r, *a, **kw: r
+
+        count = stream.sync(state={}, transformer=transformer)
+
+        self.assertEqual(count, 0)
+        mock_wr.assert_not_called()
+
+    @patch("tap_qualtrics.streams.abstracts.get_bookmark", return_value="2021-01-01T00:00:00Z")
+    @patch("tap_qualtrics.streams.abstracts.BaseStream.is_selected", return_value=True)
+    def test_null_replication_key_raises_qualtrics_error(self, _, _bk):
+        from tap_qualtrics.exceptions import QualtricsError
+
+        stream = self._stream()
+        stream.client.get.return_value = {
+            "result": {"elements": [{"id": 1, "updated_at": None}], "nextPage": None}
+        }
+        transformer = MagicMock()
+        transformer.transform.side_effect = lambda r, *a, **kw: r
+
+        with self.assertRaises(QualtricsError):
+            stream.sync(state={}, transformer=transformer)
+
+    @patch("tap_qualtrics.streams.abstracts.get_bookmark", return_value="2021-01-01T00:00:00Z")
+    @patch("tap_qualtrics.streams.abstracts.BaseStream.is_selected", return_value=True)
+    def test_unexpected_replication_key_type_raises_qualtrics_error(self, _, _bk):
+        from tap_qualtrics.exceptions import QualtricsError
+
+        stream = self._stream()
+        stream.client.get.return_value = {
+            "result": {"elements": [{"id": 1, "updated_at": 1700000000}], "nextPage": None}
+        }
+        transformer = MagicMock()
+        transformer.transform.side_effect = lambda r, *a, **kw: r
+
+        with self.assertRaises(QualtricsError):
+            stream.sync(state={}, transformer=transformer)
+
 
 # ---------------------------------------------------------------------------
 # SurveyChildStream

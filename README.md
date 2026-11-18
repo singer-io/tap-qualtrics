@@ -245,6 +245,60 @@ Command: python3 -m pytest -q tests/unittests
 Result: 622 passed, 2 subtests passed
 ```
 
+Branch-aware coverage gate:
+
+```text
+coverage run --branch -m pytest tests/unittests
+coverage report -m --fail-under=99
+```
+
+Targeted mutation testing (behavior strength checks):
+
+```text
+./scripts/run_mutation_tests.sh
+```
+
+This mutation run focuses on:
+
+- `tap_qualtrics/client.py`
+- `tap_qualtrics/streams/abstracts.py`
+- `tap_qualtrics/sync.py` (bookmark/sync progression logic)
+
+### Stream Contract Tests (Recorded API Fixtures)
+
+The repository includes contract tests that replay sanitized, recorded Qualtrics API
+responses through the real discovery + `sync()` flow.
+
+Record fixtures from live API:
+
+```text
+python scripts/record_contract_fixtures.py --config ./config.json
+```
+
+Replay recorded fixtures offline (no live API required):
+
+```text
+python -m pytest tests/contracts/test_stream_contract_replay.py -q
+```
+
+Enforce fixture coverage for all static streams in registry:
+
+```text
+ENFORCE_CONTRACT_FIXTURE_COVERAGE=1 python -m pytest tests/contracts/test_stream_contract_replay.py -q
+```
+
+Nightly live schema compatibility check (live credentials required):
+
+```text
+QUALTRICS_CONTRACT_CONFIG=./config.json python -m pytest tests/contracts/test_live_schema_contract.py -q -m live_contract
+```
+
+Optional stream subset for live checks:
+
+```text
+QUALTRICS_LIVE_CONTRACT_STREAMS=surveys,users,mailing_lists
+```
+
 ### Dynamic Export Discovery
 
 The tap includes export-based streams whose schema is not fixed ahead of time. In particular:

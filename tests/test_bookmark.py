@@ -78,6 +78,11 @@ class QualtricsBookMarkTest(QualtricsBaseTest):
                              .get(self.STREAM, {})
                              .get(self.REPLICATION_KEY))
         self.assertIsNotNone(bookmark_2, "Sync 2 did not write a bookmark")
+        self.assertGreaterEqual(
+            self.parse_date(bookmark_2),
+            self.parse_date(bookmark_1),
+            msg=f"Bookmark moved backwards on sync 2: {bookmark_2!r} < {bookmark_1!r}",
+        )
 
     # -------------------------------------------------------------------------
 

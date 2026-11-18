@@ -13,5 +13,12 @@ class QualtricsAutomaticFields(MinimumSelectionTest, QualtricsBaseTest):
         return "tap_tester_qualtrics_automatic_fields_test"
 
     def streams_to_test(self):
-        streams_to_exclude = {'tickets'}
-        return self.expected_stream_names().difference(streams_to_exclude)
+        selected = self.expected_stream_names()
+        exclusions = {
+            stream: reason
+            for stream, reason in {
+                'tickets': 'Ticket fields are not consistently selectable in the shared integration account.',
+            }.items()
+            if stream in selected
+        }
+        return self.apply_stream_exclusions(selected, exclusions)

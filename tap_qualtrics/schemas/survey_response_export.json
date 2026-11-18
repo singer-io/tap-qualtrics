@@ -1,0 +1,31 @@
+{
+  "type": "object",
+  "properties": {
+    "responseId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "recorded_date": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "format": "date-time"
+    },
+    "survey_id": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "values": {
+      "type": [
+        "null",
+        "object"
+      ],
+      "additionalProperties": true
+    }
+  }
+}

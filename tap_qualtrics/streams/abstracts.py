@@ -26,9 +26,22 @@ LOGGER = get_logger()
 
 def _bookmark_datetime(value: str) -> datetime:
     """Treat the empty child-stream bookmark as earlier than any timestamp."""
-    if value == "":
+    if value in ("", None):
         return datetime.min.replace(tzinfo=timezone.utc)
-    return utils.strptime_to_utc(value)
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+    if not isinstance(value, str):
+        raise QualtricsError(
+            f"Invalid bookmark datetime type: {type(value).__name__}. Expected string, datetime, or null."
+        )
+    try:
+        return utils.strptime_to_utc(value)
+    except Exception as err:  # pylint: disable=broad-exception-caught
+        raise QualtricsError(
+            f"Invalid bookmark datetime value: {value!r}. Expected RFC3339-compatible timestamp."
+        ) from err
 
 
 def _validate_bookmark_state(state: Dict, stream: str) -> None:
@@ -297,7 +310,12 @@ class IncrementalStream(BaseStream):
             try:
                 for record in self.get_records(parent_id, bookmark):
                     transformed = transformer.transform(record, self.schema, self.mdata)
-                    record_bk = transformed.get(self.replication_keys[0], "")
+                    replication_key = self.replication_keys[0]
+                    record_bk = transformed.get(replication_key, "")
+                    if record_bk in (None, ""):
+                        raise QualtricsError(
+                            f"Record for stream '{self.tap_stream_id}' is missing replication key '{replication_key}'."
+                        )
                     if _bookmark_datetime(record_bk) >= _bookmark_datetime(bookmark):
                         counter.increment()
                         if self.is_selected():

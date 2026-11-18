@@ -9,6 +9,7 @@ from tap_qualtrics.exceptions import (
     QualtricsBadGatewayError,
     QualtricsError,
     QualtricsForbiddenError,
+    QualtricsPaginationError,
 )
 
 
@@ -374,15 +375,16 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
         discovered_ids = sorted(name.rsplit("__", 1)[1] for name, _, _ in entries)
         self.assertEqual(discovered_ids, ["SV_1", "SV_2"])
         self.assertEqual(skipped, [])
+        first_call = client.get.call_args_list[0]
+        self.assertEqual(first_call.args[0], "surveys")
+        self.assertEqual(first_call.kwargs.get("params"), {"pageSize": 100})
+        self.assertIsNone(first_call.kwargs.get("full_url"))
         # Second page must be requested via the full nextPage URL, not re-derived params.
         second_call = client.get.call_args_list[1]
+        self.assertIsNone(second_call.kwargs.get("params"))
         self.assertEqual(second_call.kwargs.get("full_url"), page_one["result"]["nextPage"])
 
-    @patch("tap_qualtrics.streams.survey_response_export.LOGGER")
-    def test_forbidden_on_later_page_keeps_earlier_surveys(self, mock_logger):
-        """A 403 on page 2+ must not discard surveys already collected from earlier pages,
-        but the truncation has to be logged so it isn't mistaken for 'account only has this
-        many surveys'."""
+    def test_forbidden_on_later_page_raises_instead_of_partial_catalog(self):
         client = _make_client()
         page_one = {
             "result": {
@@ -405,12 +407,8 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
         ).encode()
         client.get_file.return_value = file_resp
 
-        entries, skipped = SurveyResponseExport.discover_dynamic_entries(client)
-
-        self.assertEqual(len(entries), 1)
-        self.assertEqual(entries[0][0], "survey_response_export__SV_1")
-        self.assertEqual(skipped, [])
-        mock_logger.warning.assert_called_once()
+        with self.assertRaises(QualtricsPaginationError):
+            SurveyResponseExport.discover_dynamic_entries(client)
 
     def test_discovery_completes_with_many_pages(self):
         """Regression test for page_size=1 with 1,001 surveys: previously a fixed max_pages
@@ -452,12 +450,28 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
         # Every survey, including the 1,001st (which the old max_pages=1000 cap would have
         # dropped), must be present.
         self.assertIn("SV_1000", discovered_ids)
+        first_call = client.get.call_args_list[0]
+        self.assertEqual(first_call.kwargs.get("params"), {"pageSize": 100})
+        self.assertIsNone(first_call.kwargs.get("full_url"))
+        for page_call in client.get.call_args_list[1:]:
+            self.assertIsNone(page_call.kwargs.get("params"))
+            self.assertIsInstance(page_call.kwargs.get("full_url"), str)
+
+    def test_non_string_next_page_raises(self):
+        client = _make_client()
+        client.get.return_value = {
+            "result": {
+                "elements": [{"id": "SV_1"}],
+                "nextPage": {"invalid": "type"},
+            }
+        }
+
+        with self.assertRaises(QualtricsPaginationError):
+            SurveyResponseExport.discover_dynamic_entries(client)
 
     def test_repeated_next_page_url_raises_instead_of_looping_forever(self):
         """If the API returns the same nextPage URL forever (a looping/misbehaving API),
         discovery must fail loudly rather than hang or silently return a partial listing."""
-        from tap_qualtrics.exceptions import QualtricsPaginationError
-
         client = _make_client()
         looping_url = "https://qualtrics.example.com/surveys?skipToken=stuck"
 
@@ -473,7 +487,6 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
         """If pagination somehow never terminates and never repeats a URL (every page
         distinct), hitting the sanity cap must raise explicitly rather than silently
         returning whatever was gathered so far as if it were the complete catalog."""
-        from tap_qualtrics.exceptions import QualtricsPaginationError
         import tap_qualtrics.streams.survey_response_export as sre_module
 
         client = _make_client()

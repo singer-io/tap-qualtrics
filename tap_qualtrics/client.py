@@ -338,6 +338,12 @@ class Client:  # pylint: disable=too-many-instance-attributes
         headers = headers or {}
         body = body or {}
         headers, params = self.authenticate(headers, params)
+        LOGGER.info(
+            "HTTP_REQUEST method=%s url=%s params=%s",
+            method.upper(),
+            endpoint,
+            params,
+        )
         try:
             return self._make_request(
                 method,
