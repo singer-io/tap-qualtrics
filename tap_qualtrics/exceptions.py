@@ -44,6 +44,13 @@ class QualtricsBadGatewayError(QualtricsError):
 class QualtricsServiceUnavailableError(QualtricsBackoffError):
     """class representing 503 status code."""
 
+class QualtricsPaginationError(QualtricsError):
+    """Raised when a paginated listing endpoint cannot be walked to completion safely -
+    either a repeated page URL was observed (the API is looping) or an iteration safety
+    cap was reached. Raised explicitly rather than silently truncating results, since a
+    partial listing (e.g. of surveys during discovery) would otherwise look identical to
+    a complete one and silently drop records downstream."""
+
 ERROR_CODE_EXCEPTION_MAPPING = {
     400: {
         "raise_exception": QualtricsBadRequestError,

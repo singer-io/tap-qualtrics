@@ -21,12 +21,22 @@ from tap_qualtrics.exceptions import (
     QualtricsRateLimitError,
     QualtricsError,
     QualtricsForbiddenError,
+    QualtricsPaginationError,
 )
 from tap_qualtrics.streams.abstracts import IncrementalStream
 
 LOGGER = get_logger()
 DISCOVERY_MAX_WORKERS = 4
 DISCOVERY_EXPORT_LIMIT = 50
+# Consecutive GET /surveys pages during discovery allowed to contribute zero not-yet-seen
+# survey ids before pagination is considered stuck. A legitimate large account still
+# contributes new survey ids on (almost) every page, however many pages that takes; this
+# only trips when the API keeps answering without ever advancing - a real failure signature,
+# not a proxy for "too many pages".
+DISCOVERY_MAX_STALE_PAGES = 3
+# How often (in pages) to log pagination progress during discovery, so a long-running but
+# healthy large-account discovery remains observable instead of silent until it finishes.
+DISCOVERY_PROGRESS_LOG_INTERVAL = 100
 
 class SurveyResponseExport(IncrementalStream):
     tap_stream_id = "survey_response_export"
@@ -47,20 +57,93 @@ class SurveyResponseExport(IncrementalStream):
                 return client.fork()
             return client
 
-        try:
-            surveys_resp = client.get("surveys")
-        except QualtricsForbiddenError as exc:
-            LOGGER.warning("Cannot list surveys during discovery: %s", exc)
-            return [], []
-        surveys = (surveys_resp.get("result") or {}).get("elements", [])
+        # Discovery must follow every surveys page and fail only on stuck pagination signals to avoid silent data loss.
+        page_size = getattr(client, "page_size", None) or 100
         unique_survey_ids = []
-        seen = set()
-        for survey in surveys:
-            survey_id = survey.get("id") if isinstance(survey, dict) else survey
-            if not survey_id or survey_id in seen:
-                continue
-            seen.add(survey_id)
-            unique_survey_ids.append(survey_id)
+        seen_survey_ids = set()
+        next_url = None
+        seen_urls = set()
+        page_count = 0
+        stale_page_count = 0
+        has_more_pages = True
+        while has_more_pages:
+            if next_url is not None and next_url in seen_urls:
+                raise QualtricsPaginationError(
+                    "GET /surveys returned a repeated nextPage URL ({}) during discovery "
+                    "after {} page(s); refusing to loop forever or silently return a partial "
+                    "survey listing.".format(next_url, page_count)
+                )
+            if next_url is not None:
+                seen_urls.add(next_url)
+            try:
+                if next_url:
+                    surveys_resp = client.get("surveys", full_url=next_url)
+                else:
+                    surveys_resp = client.get("surveys", params={"pageSize": page_size})
+            except QualtricsForbiddenError as exc:
+                if page_count == 0:
+                    LOGGER.warning("Cannot list surveys during discovery: %s", exc)
+                    return [], []
+                # A 403 after at least one successful page means pagination stopped before
+                # completion; failing here prevents silently emitting a partial catalog.
+                raise QualtricsPaginationError(
+                    "GET /surveys returned 403 during discovery after {} page(s); refusing "
+                    "to continue with a partial survey listing.".format(page_count)
+                ) from exc
+            page_count += 1
+            result = surveys_resp.get("result") or {}
+            page_elements = result.get("elements") or []
+
+            new_ids_this_page = 0
+            for survey in page_elements:
+                survey_id = survey.get("id") if isinstance(survey, dict) else survey
+                if survey_id and survey_id not in seen_survey_ids:
+                    seen_survey_ids.add(survey_id)
+                    unique_survey_ids.append(survey_id)
+                    new_ids_this_page += 1
+
+            next_url = result.get("nextPage")
+            if next_url is not None and not isinstance(next_url, str):
+                raise QualtricsPaginationError(
+                    "GET /surveys returned invalid nextPage type {} during discovery after {} "
+                    "page(s); expected a URL string or null.".format(type(next_url).__name__, page_count)
+                )
+            has_more_pages = bool(next_url)
+
+            if new_ids_this_page == 0 and has_more_pages:
+                # A changing cursor alone doesn't prove progress: the API could keep answering
+                # a fresh nextPage URL while repeating (or emptying out) the underlying data.
+                # Only a run of pages that contribute zero not-yet-seen survey ids, while still
+                # claiming more pages exist, is treated as stuck.
+                stale_page_count += 1
+                if stale_page_count >= DISCOVERY_MAX_STALE_PAGES:
+                    raise QualtricsPaginationError(
+                        "GET /surveys returned {} consecutive page(s) during discovery with no "
+                        "new survey ids, after {} page(s) total, while still reporting more "
+                        "pages; refusing to loop forever or silently return a partial survey "
+                        "listing. This likely indicates the API is not making forward progress."
+                        .format(stale_page_count, page_count)
+                    )
+            else:
+                stale_page_count = 0
+
+            if page_count % DISCOVERY_PROGRESS_LOG_INTERVAL == 0:
+                LOGGER.info(
+                    "Discovery survey listing in progress: %d page(s), %d unique survey id(s) "
+                    "so far.", page_count, len(seen_survey_ids),
+                )
+
+        LOGGER.info(
+            "Survey response export discovery: listed %d unique survey(s) across "
+            "%d page(s); preparing one sample export per survey with at most %d "
+            "concurrent workers and %d records per sample. Retries may create "
+            "additional jobs. Qualtrics has no documented cancel/delete endpoint "
+            "for these jobs; large accounts may take longer and consume more API quota.",
+            len(unique_survey_ids),
+            page_count,
+            min(DISCOVERY_MAX_WORKERS, len(unique_survey_ids)),
+            DISCOVERY_EXPORT_LIMIT,
+        )
 
         # Qualtrics has no documented cancel/delete endpoint for these export jobs.
         # Discovery therefore creates provider-managed jobs solely to infer

@@ -235,6 +235,8 @@ This is required for dynamic polling APIs where the schema is only known after d
 - Discovery-side impact
     - Each discovery run creates real export jobs against Qualtrics, consuming API quota, creating account-side artifacts, and adding latency.
     - The tap limits this impact by using small sample exports where supported, capping worker concurrency, and deduplicating parent resources so the same survey or event type does not spawn duplicate jobs in one run.
+    - Survey response export discovery lists all surveys, then logs the total unique survey count and page count before starting export workers. It attempts one sample export per unique survey, with at most four concurrent workers and 50 records per sample; retries can create additional jobs.
+    - There is no total survey ceiling. Large accounts create more provider-side jobs and take longer to discover. Qualtrics has no documented cancel/delete endpoint for these jobs.
 
 - Dynamic, discovery-time catalog
     - Catalog entries are generated only from what discovery actually finds, not from a static list of all possible objects.
