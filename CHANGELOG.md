@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0
+## 1.0.2
   * Add incremental `survey_definitions`, `survey_questions`, and `survey_flows` streams.
   * Preserve object-valued question `Randomization` fields without converting them to strings.
   * Automatically backfill newly selected or lagging survey detail streams without replaying historical records in `surveys` or unrelated child streams.
