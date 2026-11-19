@@ -31,6 +31,16 @@ DISCOVERY_EXPORT_LIMIT = 50
 # Safety cap used only to convert looping/non-terminating pagination into an explicit failure.
 DISCOVERY_MAX_SURVEY_PAGES = 100_000
 
+
+def _reported_total_from_export_status(status_response: Dict) -> int | None:
+    """Best-effort extraction of API-reported record totals from export status payloads."""
+    result = (status_response or {}).get("result") or {}
+    for key in ("recordCount", "totalResponses", "totalCount", "count"):
+        value = result.get(key)
+        if isinstance(value, int) and value >= 0:
+            return value
+    return None
+
 class SurveyResponseExport(IncrementalStream):
     tap_stream_id = "survey_response_export"
     key_properties = ["responseId"]
@@ -221,18 +231,51 @@ class SurveyResponseExport(IncrementalStream):
             return
 
         final = self.client.poll_export(f"surveys/{survey_id}/export-responses/{export_id}")
+        api_total = _reported_total_from_export_status(final)
         file_id = (final.get("result") or {}).get("fileId", "")
         if not file_id:
             return
 
-        resp = self.client.get_file(f"surveys/{survey_id}/export-responses/{file_id}/file")
+        resp = self.client.get_file(f"surveys/{survey_id}/export-responses/{file_id}/file", stream=True)
+        emitted_count = 0
+        content_type = ((getattr(resp, "headers", {}) or {}).get("Content-Type") or "").lower()
+
+        if "ndjson" in content_type or "jsonl" in content_type:
+            for line in resp.iter_lines(decode_unicode=True):
+                line = (line or "").strip()
+                if not line:
+                    continue
+                response = json.loads(line)
+                response["survey_id"] = survey_id
+                response["recorded_date"] = (response.get("values") or {}).get("recordedDate", "")
+                emitted_count += 1
+                yield response
+
+            if api_total is not None and emitted_count != api_total:
+                LOGGER.warning(
+                    "Record-count reconciliation mismatch for survey %s: emitted=%d, api_total=%d",
+                    survey_id,
+                    emitted_count,
+                    api_total,
+                )
+            return
+
         if not resp.content:
             return
         data = json.loads(resp.content)
         for response in data.get("responses", []):
             response["survey_id"] = survey_id
             response["recorded_date"] = (response.get("values") or {}).get("recordedDate", "")
+            emitted_count += 1
             yield response
+
+        if api_total is not None and emitted_count != api_total:
+            LOGGER.warning(
+                "Record-count reconciliation mismatch for survey %s: emitted=%d, api_total=%d",
+                survey_id,
+                emitted_count,
+                api_total,
+            )
 
     def sync(self, state: Dict, transformer: Transformer, parent_id: Any = None) -> int:
         survey_id = (parent_id or {}).get("id") or parent_id

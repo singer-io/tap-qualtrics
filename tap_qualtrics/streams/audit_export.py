@@ -49,6 +49,16 @@ def _ensure_record_id(record: Dict) -> Dict:
     return record
 
 
+def _reported_total_from_export_status(status_response: Dict) -> int | None:
+    """Best-effort extraction of API-reported record totals from export status payloads."""
+    result = (status_response or {}).get("result") or {}
+    for key in ("recordCount", "totalCount", "totalRecords", "count"):
+        value = result.get(key)
+        if isinstance(value, int) and value >= 0:
+            return value
+    return None
+
+
 class AuditExport(IncrementalStream):
     tap_stream_id = "audit_export"
     key_properties = ["id"]
@@ -209,9 +219,32 @@ class AuditExport(IncrementalStream):
             return
 
         final = self.client.poll_export(f"audit-exports/{export_id}")
+        api_total = _reported_total_from_export_status(final)
         file_id = (final.get("result") or {}).get("fileId", export_id)
 
-        resp = self.client.get_file(f"audit-exports/{export_id}/files/{file_id}")
+        resp = self.client.get_file(f"audit-exports/{export_id}/files/{file_id}", stream=True)
+        emitted_count = 0
+        content_type = ((getattr(resp, "headers", {}) or {}).get("Content-Type") or "").lower()
+
+        if "ndjson" in content_type or "jsonl" in content_type:
+            for line in resp.iter_lines(decode_unicode=True):
+                line = (line or "").strip()
+                if not line:
+                    continue
+                record = json.loads(line)
+                record["event_type"] = event_name
+                emitted_count += 1
+                yield _ensure_record_id(record)
+
+            if api_total is not None and emitted_count != api_total:
+                LOGGER.warning(
+                    "Record-count reconciliation mismatch for %s: emitted=%d, api_total=%d",
+                    event_name,
+                    emitted_count,
+                    api_total,
+                )
+            return
+
         if not resp.content:
             return
         try:
@@ -221,7 +254,15 @@ class AuditExport(IncrementalStream):
                 if line:
                     record = json.loads(line)
                     record["event_type"] = event_name
+                    emitted_count += 1
                     yield _ensure_record_id(record)
+            if api_total is not None and emitted_count != api_total:
+                LOGGER.warning(
+                    "Record-count reconciliation mismatch for %s: emitted=%d, api_total=%d",
+                    event_name,
+                    emitted_count,
+                    api_total,
+                )
             return
         except (json.JSONDecodeError, ValueError):
             pass
@@ -236,11 +277,21 @@ class AuditExport(IncrementalStream):
             for record in records:
                 record["event_type"] = event_name
                 _ensure_record_id(record)
+                emitted_count += 1
             yield from records
         elif isinstance(records, dict):
             for record in records.get("events", [records]):
                 record["event_type"] = event_name
+                emitted_count += 1
                 yield _ensure_record_id(record)
+
+        if api_total is not None and emitted_count != api_total:
+            LOGGER.warning(
+                "Record-count reconciliation mismatch for %s: emitted=%d, api_total=%d",
+                event_name,
+                emitted_count,
+                api_total,
+            )
 
     def sync(  # pylint: disable=too-many-branches
         self,

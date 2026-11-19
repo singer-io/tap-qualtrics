@@ -420,6 +420,39 @@ class QualtricsBaseTest(BaseCase):
         'nightly': _STREAMS_FOR_TESTING_NIGHTLY,
     }
 
+    _TEST_STREAM_GROUPS = {
+        'pr-core': {
+            'users',
+            'groups',
+            'surveys',
+        },
+        'pr-stateful': {
+            'mailing_lists',
+            'tickets',
+        },
+        'nightly-core': {
+            'users',
+            'groups',
+            'surveys',
+            'mailing_lists',
+            'tickets',
+        },
+        'nightly-catalog': {
+            'audit_events_types',
+            'libraries',
+            'directories',
+            'mailing_list_contacts',
+            'segments',
+        },
+        'nightly-incremental': {
+            'survey_definitions',
+            'survey_questions',
+            'survey_response_export',
+            'distributions',
+            'erasure_requests',
+        },
+    }
+
     @classmethod
     def stream_test_tier(cls):
         return os.getenv("TAP_QUALTRICS_TEST_STREAM_TIER", "pr").strip().lower()
@@ -470,7 +503,25 @@ class QualtricsBaseTest(BaseCase):
             for stream, reason in cls.stream_exclusion_reasons().items()
             if stream in selected
         }
-        return cls.apply_stream_exclusions(selected, exclusions)
+        selected = cls.apply_stream_exclusions(selected, exclusions)
+
+        group = os.getenv("TAP_QUALTRICS_TEST_STREAM_GROUP", "").strip().lower()
+        if group:
+            if group not in cls._TEST_STREAM_GROUPS:
+                raise ValueError(
+                    "Unsupported TAP_QUALTRICS_TEST_STREAM_GROUP '{}'. Expected one of: {}".format(
+                        group, sorted(cls._TEST_STREAM_GROUPS)
+                    )
+                )
+            selected = selected.intersection(cls._TEST_STREAM_GROUPS[group])
+            if not selected:
+                raise ValueError(
+                    "No streams selected after applying TAP_QUALTRICS_TEST_STREAM_GROUP='{}' for tier '{}'".format(
+                        group, tier
+                    )
+                )
+
+        return selected
 
     @staticmethod
     def get_credentials():

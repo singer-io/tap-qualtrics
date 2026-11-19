@@ -426,13 +426,14 @@ class Client:  # pylint: disable=too-many-instance-attributes
         self,
         path: str,
         full_url: Optional[str] = None,
+        stream: bool = False,
     ) -> requests.Response:
         """GET request returning the raw response (for file downloads)."""
         url = full_url or f"{self.base_url}/{path}"
         headers = dict(self._get_headers())
         # remove Content-Type for binary downloads
         headers.pop("Content-Type", None)
-        return self.make_request("GET", url, headers=headers)
+        return self.make_request("GET", url, headers=headers, stream=stream)
 
     def poll_export(
         self,
