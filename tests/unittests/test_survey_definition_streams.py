@@ -1,10 +1,12 @@
 """Tests for the survey definitions, questions, and flows streams."""
 import copy
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 import singer
 from jsonschema import Draft4Validator, FormatChecker
+from requests import Response
 from singer import metadata
 
 from tap_qualtrics.discover import discover
@@ -326,6 +328,42 @@ def test_question_choice_shapes_and_order_transform_consistently(choices):
         )
     assert transformed["Choices"] == choices
     assert transformed["ChoiceOrder"] == ["1", "2"]
+
+
+@pytest.mark.parametrize("randomization", [
+    {"Advanced": {"RandomizeAll": True, "DisplayCount": 2}, "Order": ["1", "2"]},
+    "All",
+    None,
+])
+def test_question_randomization_preserves_type_in_emitted_record(randomization, capsys):
+    catalog = singer.Catalog.from_dict(json.loads(json.dumps(
+        _selected_catalog({"survey_questions"}).to_dict()
+    )))
+    client = _client()
+    response = Response()
+    response.status_code = 200
+    response._content = json.dumps({"result": {"elements": [{
+        "QuestionID": "QID1", "Randomization": randomization,
+    }]}}).encode("utf-8")
+    client.get.side_effect = lambda path, **kwargs: (
+        {"result": {"elements": [copy.deepcopy(PARENT)]}}
+        if path == "surveys" else response.json()
+    )
+
+    sync(client, client.config, catalog, {})
+
+    messages = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    records = [
+        message["record"] for message in messages
+        if message["type"] == "RECORD" and message["stream"] == "survey_questions"
+    ]
+    assert len(records) == 1
+    assert records[0]["Randomization"] == randomization
+    assert type(records[0]["Randomization"]) is type(randomization)
+    Draft4Validator(
+        catalog.get_stream("survey_questions").schema.to_dict(),
+        format_checker=FormatChecker(),
+    ).validate(records[0])
 
 
 @pytest.mark.parametrize("stream_cls", DETAIL_STREAMS)

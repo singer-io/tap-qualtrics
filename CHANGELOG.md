@@ -2,6 +2,7 @@
 
 ## 2.0.0
   * Add incremental `survey_definitions`, `survey_questions`, and `survey_flows` streams.
+  * Preserve object-valued question `Randomization` fields without converting them to strings.
   * Automatically backfill newly selected or lagging survey detail streams without replaying historical records in `surveys` or unrelated child streams.
   * Validate survey detail response shapes and commit survey traversal bookmarks only after all selected children succeed.
   * Compare incremental timestamps chronologically, including fractional seconds and equivalent timezone offsets.[#6](https://github.com/singer-io/tap-qualtrics/pull/6)
