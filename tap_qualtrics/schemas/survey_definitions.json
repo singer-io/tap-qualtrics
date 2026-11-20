@@ -1,1 +1,152 @@
-{"type": "object", "properties": {}, "additionalProperties": true}
+{
+    "type": "object",
+    "properties": {
+        "QuestionCount": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "SurveyID": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "SurveyName": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "SurveyStatus": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "LastModified": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "BrandID": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "OwnerID": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "DivisionID": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "LastAccessed": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "CreatorID": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "LastActivated": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        },
+        "SurveyOptions": {
+            "type": [
+                "null",
+                "object"
+            ]
+        },
+        "Questions": {
+            "type": [
+                "null",
+                "object"
+            ]
+        },
+        "Blocks": {
+            "type": [
+                "null",
+                "object"
+            ]
+        },
+        "ResponseSets": {
+            "type": [
+                "null",
+                "object"
+            ]
+        },
+        "SurveyFlow": {
+            "type": [
+                "null",
+                "object"
+            ]
+        },
+        "Quotas": {
+            "type": [
+                "null",
+                "object"
+            ]
+        },
+        "QuotaGroups": {
+            "type": [
+                "null",
+                "object"
+            ]
+        },
+        "QuotaGroupOrder": {
+            "type": [
+                "null",
+                "array"
+            ],
+            "items": {
+                "type": "string"
+            }
+        },
+        "Scoring": {
+            "type": [
+                "null",
+                "object"
+            ]
+        },
+        "ProjectInfo": {
+            "type": [
+                "null",
+                "object"
+            ]
+        },
+        "BrandBaseURL": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "survey_id": {
+            "type": [
+                "null",
+                "string"
+            ]
+        }
+    },
+    "patternProperties": {
+        ".*": {}
+    }
+}

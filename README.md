@@ -6,7 +6,7 @@ following the [Singer spec](https://github.com/singer-io/getting-started/blob/ma
 This tap:
 
 - Pulls raw data from the [Qualtrics API](https://api.qualtrics.com).
-- Extracts the following resources (48 streams across 11 groups):
+- Extracts the following resources (51 streams across 11 groups):
   - Users, Groups, Audit, Libraries, Directories, Mailing Lists, Segments, Samples, Surveys, Distributions, Tickets
 - Outputs the schema for each resource
 - Incrementally pulls data based on the input state
@@ -154,6 +154,28 @@ This tap:
 - Primary keys: `SurveyID`
 - Replication strategy: FULL_TABLE
 
+**[survey_definitions](https://developer-docs.qualtrics.com/docs/public-api/surveyDefinitions/get-survey/#)** *(child of surveys)*
+- Endpoint: `GET /survey-definitions/{surveyId}`
+- Primary key: `SurveyID`
+- Replication strategy: INCREMENTAL
+- Replication key: `LastModified` (from the survey-definition response)
+- One row per survey, including the complete definition payload.
+- Parent survey `lastModified` controls which surveys are revisited; the definition's `LastModified` is used as this stream's replication bookmark.
+
+**[survey_questions](https://developer-docs.qualtrics.com/docs/public-api/surveyDefinitions/get-questions/)** *(child of surveys)*
+- Endpoint: `GET /survey-definitions/{surveyId}/questions`
+- Primary keys: `survey_id`, `QuestionID`
+- Replication strategy: INCREMENTAL
+- Replication key: `lastModified` (inherited from the parent survey)
+- One row per question, including questions in the survey's Trash block.
+
+**[survey_flows](https://developer-docs.qualtrics.com/docs/public-api/surveyDefinitions/get-flow/)** *(child of surveys)*
+- Endpoint: `GET /survey-definitions/{surveyId}/flow`
+- Primary key: `survey_id`
+- Replication strategy: INCREMENTAL
+- Replication key: `lastModified` (inherited from the parent survey)
+- One row per survey with the complete flow payload.
+
 **[survey_quotas](https://api.qualtrics.com/371bb797b85f7-get-survey-quotas)** *(child of surveys)*
 - Primary keys: `quotaId`
 - Replication strategy: FULL_TABLE
@@ -194,16 +216,35 @@ This tap:
 - Selecting translations automatically traverses surveys and languages, even when those
   streams are not selected for output.
 
-These four streams follow the surveys bookmark and only fetch surveys that pass the
-parent's incremental filter. Each record carries the survey's `lastModified`, and each
-stream maintains its own bookmark using the existing child-stream implementation.
+Each survey child record carries the survey's `lastModified`, and each stream maintains
+its own bookmark.
 Changes are detected through the parent survey's modification timestamp, not separate
 timestamps supplied by these endpoints.
-Re-run discovery to refresh replication metadata. When adding these streams to a pipeline
-with existing bookmarks, clear the bookmarks for the streams being backfilled and all
-their ancestors, or run a separate initial sync with fresh state to backfill older surveys.
+When definitions, questions, or flows are selected, survey traversal starts at the earliest
+bookmark among `surveys` and those selected detail streams. A detail stream with no bookmark
+automatically backfills from `start_date`, even when `surveys` already has a newer bookmark.
+Each detail stream uses its own starting bookmark; historical backfill does not replay
+parent records or unrelated child streams. Set `start_date` early enough for the backfill.
+Bookmarks commit only after the entire traversal succeeds. Missing or malformed detail
+responses fail the traversal; an explicit empty questions list is valid. A failed traversal
+is replayed on the next run, so records already emitted may be emitted again.
+If an earlier version missed records, clear the affected detail stream's bookmark to
+backfill it; resetting the `surveys` bookmark is not necessary for these three streams.
+
+Re-run discovery to refresh replication metadata. Other survey child streams still follow
+the parent's incremental filter. When adding versions, options, languages, or translations
+to a pipeline with existing bookmarks, clear the bookmarks for the streams being backfilled
+and all their ancestors, or run a separate initial sync with fresh state.
 For translations, clear `survey_translations`, `survey_languages`, and `surveys` bookmarks.
-Set `start_date` early enough to include the surveys being backfilled.
+
+### Test Results
+
+Latest local unit-test run:
+
+```text
+Command: python3 -m pytest -q tests/unittests
+Result: 622 passed, 2 subtests passed
+```
 
 ### Dynamic Export Discovery
 

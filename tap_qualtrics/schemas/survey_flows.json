@@ -1,0 +1,118 @@
+{
+    "type": "object",
+    "properties": {
+        "survey_id": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "FlowID": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "Type": {
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        "Properties": {
+            "type": [
+                "null",
+                "object"
+            ],
+            "properties": {
+                "Count": {
+                    "type": [
+                        "null",
+                        "integer"
+                    ]
+                }
+            },
+            "patternProperties": {
+                ".*": {}
+            }
+        },
+        "Flow": {
+            "type": [
+                "null",
+                "array"
+            ],
+            "items": {
+                "type": "object",
+                "properties": {
+                    "FlowID": {
+                        "type": [
+                            "null",
+                            "string"
+                        ]
+                    },
+                    "Type": {
+                        "type": [
+                            "null",
+                            "string"
+                        ]
+                    },
+                    "ID": {
+                        "type": [
+                            "null",
+                            "string"
+                        ]
+                    },
+                    "Properties": {
+                        "type": [
+                            "null",
+                            "object"
+                        ]
+                    },
+                    "Flow": {
+                        "type": [
+                            "null",
+                            "array"
+                        ],
+                        "items": {
+                            "type": "object",
+                            "patternProperties": {
+                                ".*": {}
+                            }
+                        }
+                    },
+                    "BranchLogic": {
+                        "type": [
+                            "null",
+                            "object"
+                        ]
+                    },
+                    "EmbeddedData": {
+                        "type": [
+                            "null",
+                            "array"
+                        ],
+                        "items": {
+                            "type": "object",
+                            "patternProperties": {
+                                ".*": {}
+                            }
+                        }
+                    }
+                },
+                "patternProperties": {
+                    ".*": {}
+                }
+            }
+        },
+        "lastModified": {
+            "type": [
+                "null",
+                "string"
+            ],
+            "format": "date-time"
+        }
+    },
+    "patternProperties": {
+        ".*": {}
+    }
+}
