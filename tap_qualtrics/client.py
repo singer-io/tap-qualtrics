@@ -325,6 +325,7 @@ class Client:  # pylint: disable=too-many-instance-attributes
         body: Optional[Dict[str, Any]] = None,
         json: Optional[Dict[str, Any]] = None,
         path: Optional[str] = None,
+        stream: bool = False,
     ) -> Any:
         """
         Sends an HTTP request to the specified API endpoint.
@@ -352,7 +353,8 @@ class Client:  # pylint: disable=too-many-instance-attributes
                 params=params,
                 data=body,
                 json=json,
-                timeout=self.request_timeout
+                timeout=self.request_timeout,
+                stream=stream,
             )
         except QualtricsUnauthorizedError:
             # Token expired mid-sync; force refresh and retry once
@@ -366,7 +368,8 @@ class Client:  # pylint: disable=too-many-instance-attributes
                 params=params,
                 data=body,
                 json=json,
-                timeout=self.request_timeout
+                timeout=self.request_timeout,
+                stream=stream,
             )
 
     @backoff.on_exception(

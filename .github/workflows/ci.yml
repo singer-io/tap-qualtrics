@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  quality-and-unit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python-version: "3.10"
+            dependency-profile: pinned
+          - python-version: "3.11"
+            dependency-profile: pinned
+          - python-version: "3.12"
+            dependency-profile: pinned
+          - python-version: "3.12"
+            dependency-profile: minimum
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          if [ "${{ matrix.dependency-profile }}" = "minimum" ]; then
+            pip install .
+            pip install \
+              "pytest>=7,<8" \
+              "coverage>=7,<8" \
+              "jsonschema>=4,<5" \
+              "responses>=0.24,<0.25" \
+              "vcrpy>=6,<7" \
+              "parameterized>=0.9,<0.10"
+          else
+            pip install .[dev]
+          fi
+          pip install "ruff>=0.8,<1" "bandit>=1.7.10,<2" "pip-audit>=2.7,<3"
+
+      - name: JSON schema sanity check
+        shell: bash
+        run: |
+          python - <<'PY'
+          import glob
+          import json
+          
+          schema_files = glob.glob('tap_qualtrics/schemas/*.json')
+          if not schema_files:
+              raise SystemExit('No schema files found under tap_qualtrics/schemas')
+          for path in schema_files:
+              with open(path, encoding='utf-8') as handle:
+                  json.load(handle)
+          print(f'Validated {len(schema_files)} schema files as JSON.')
+          PY
+
+      - name: Ruff
+        run: ruff check tap_qualtrics tests
+
+      - name: Bandit
+        run: bandit -q -r tap_qualtrics -ll
+
+      - name: pip-audit
+        run: pip-audit
+
+      - name: Unit tests
+        run: coverage run --branch -m pytest tests/unittests -q
+
+      - name: Coverage report
+        shell: bash
+        run: |
+          coverage report -m --fail-under=99 | tee coverage.txt
+          coverage html
+
+      - name: Contract replay tests (offline)
+        env:
+          ENFORCE_CONTRACT_FIXTURE_COVERAGE: "0"
+        run: python -m pytest tests/contracts/test_stream_contract_replay.py -q
+
+      - name: Generate per-stream test matrix
+        run: python scripts/generate_stream_test_matrix.py
+
+      - name: Upload stream test matrix artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: stream-test-matrix-py${{ matrix.python-version }}-${{ matrix.dependency-profile }}
+          path: |
+            test_output/stream_test_matrix.md
+            test_output/stream_test_matrix.csv
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-py${{ matrix.python-version }}-${{ matrix.dependency-profile }}
+          path: |
+            coverage.txt
+            htmlcov
