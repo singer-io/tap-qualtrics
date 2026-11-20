@@ -158,8 +158,9 @@ This tap:
 - Endpoint: `GET /survey-definitions/{surveyId}`
 - Primary key: `SurveyID`
 - Replication strategy: INCREMENTAL
-- Replication key: `lastModified` (inherited from the parent survey)
+- Replication key: `LastModified` (from the survey-definition response)
 - One row per survey, including the complete definition payload.
+- Parent survey `lastModified` controls which surveys are revisited; the definition's `LastModified` is used as this stream's replication bookmark.
 
 **[survey_questions](https://developer-docs.qualtrics.com/docs/public-api/surveyDefinitions/get-questions/)** *(child of surveys)*
 - Endpoint: `GET /survey-definitions/{surveyId}/questions`

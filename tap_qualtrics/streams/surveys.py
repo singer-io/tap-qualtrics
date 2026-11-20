@@ -41,12 +41,21 @@ class Surveys(IncrementalStream):
         # an already processed survey; commit bookmarks only after completion.
         pending_state = deepcopy(state)
         parent_bookmark = self.get_bookmark(state, self.tap_stream_id)
-        child_bookmarks = {
-            child.tap_stream_id: child.get_bookmark(state, child.tap_stream_id)
-            for child in details
-        }
+        child_parent_cursors = {}
+        for child in details:
+            cursor_key = getattr(child, "parent_cursor_key", None)
+            if cursor_key:
+                child_parent_cursors[child.tap_stream_id] = self.get_bookmark(
+                    state, child.tap_stream_id, key=cursor_key
+                )
+            else:
+                child_parent_cursors[child.tap_stream_id] = child.get_bookmark(
+                    state, child.tap_stream_id
+                )
         traversal_bookmark = min(
-            parent_bookmark, *child_bookmarks.values(), key=utils.strptime_to_utc
+            parent_bookmark,
+            *child_parent_cursors.values(),
+            key=utils.strptime_to_utc,
         )
         max_bookmark = parent_bookmark
         with metrics.record_counter(self.tap_stream_id) as counter:
@@ -62,9 +71,9 @@ class Surveys(IncrementalStream):
                         write_record(self.tap_stream_id, transformed)
                     counter.increment()
                 for child in self.child_to_sync:
-                    if child.tap_stream_id in child_bookmarks:
+                    if child.tap_stream_id in child_parent_cursors:
                         child_due = record_datetime >= utils.strptime_to_utc(
-                            child_bookmarks[child.tap_stream_id]
+                            child_parent_cursors[child.tap_stream_id]
                         )
                     else:
                         child_due = parent_due
@@ -80,7 +89,15 @@ class Surveys(IncrementalStream):
         self.write_bookmark(pending_state, self.tap_stream_id, value=max_bookmark)
         # Empty question lists still complete the backfill for their surveys.
         for child in details:
-            if child.parent_replication_key:
+            cursor_key = getattr(child, "parent_cursor_key", None)
+            if cursor_key:
+                self.write_bookmark(
+                    pending_state,
+                    child.tap_stream_id,
+                    key=cursor_key,
+                    value=max_bookmark,
+                )
+            else:
                 child.write_bookmark(
                     pending_state, child.tap_stream_id, value=max_bookmark
                 )

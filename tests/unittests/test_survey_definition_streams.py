@@ -81,7 +81,7 @@ def test_streams_are_registered_as_incremental_survey_children():
             assert metadata.get(mdata, ("properties", key), "inclusion") == "automatic"
 
 
-def test_stream_records_use_endpoint_shape_and_parent_replication_key():
+def test_stream_records_use_endpoint_shape_and_replication_fields():
     responses = [
         (
             SurveyDefinitions,
@@ -452,10 +452,14 @@ def test_upgrade_backfills_child_without_replaying_parent_or_other_children(
     ]
     assert [record["id"] for record in emitted["surveys"]] == ["SV_new"]
     assert [record["id"] for record in emitted["survey"]] == ["SV_new"]
+    expected_parent_start = (
+        client.config["start_date"]
+        if stream_cls is SurveyDefinitions
+        else child_bookmark or client.config["start_date"]
+    )
     client.get.assert_any_call(
-        "surveys", params={
-            "startDate": child_bookmark or client.config["start_date"], "pageSize": 100,
-        },
+        "surveys",
+        params={"startDate": expected_parent_start, "pageSize": 100},
     )
     for stream_id in ("surveys", stream_cls.tap_stream_id):
         bookmark_key = (
@@ -470,6 +474,65 @@ def test_upgrade_backfills_child_without_replaying_parent_or_other_children(
         assert singer.utils.strptime_to_utc(
             state["bookmarks"][stream_id][bookmark_key]
         ) == singer.utils.strptime_to_utc(expected_bookmark)
+    if stream_cls is SurveyDefinitions:
+        assert singer.utils.strptime_to_utc(
+            state["bookmarks"]["survey_definitions"]["parent_lastModified"]
+        ) == singer.utils.strptime_to_utc(parents[-1]["lastModified"])
+
+
+def test_survey_definition_api_bookmark_is_not_used_as_parent_cursor():
+    parent_bookmark = "2026-03-01T00:00:00Z"
+    parent_cursor = "2026-02-01T00:00:00Z"
+    definition_bookmark = "2026-12-01T00:00:00Z"
+    parents = [
+        {"id": "SV_old", "lastModified": "2026-02-15T00:00:00Z"},
+        {"id": "SV_new", "lastModified": parent_bookmark},
+    ]
+    client = _client()
+
+    def get(path, **kwargs):
+        if path == "surveys":
+            return {"result": {"elements": copy.deepcopy(parents)}}
+        survey_id = path.rsplit("/", 1)[-1]
+        definition_timestamp = (
+            "2026-11-30T00:00:00Z"
+            if survey_id == "SV_old"
+            else "2026-12-15T00:00:00Z"
+        )
+        return {"result": {
+            "SurveyID": survey_id,
+            "LastModified": definition_timestamp,
+        }}
+
+    client.get.side_effect = get
+    state = {"bookmarks": {
+        "surveys": {"lastModified": parent_bookmark},
+        "survey_definitions": {
+            "LastModified": definition_bookmark,
+            "parent_lastModified": parent_cursor,
+        },
+    }}
+
+    with patch("tap_qualtrics.streams.abstracts.write_record") as write_record, \
+            patch("tap_qualtrics.streams.abstracts.write_schema"), \
+            patch("singer.write_state"):
+        sync(client, client.config, _selected_catalog({"survey_definitions"}), state)
+
+    client.get.assert_any_call(
+        "surveys",
+        params={"startDate": parent_cursor, "pageSize": 100},
+    )
+    records = [
+        args[1] for args, _ in write_record.call_args_list
+        if args[0] == "survey_definitions"
+    ]
+    assert [record["SurveyID"] for record in records] == ["SV_new"]
+    assert state["bookmarks"]["survey_definitions"]["LastModified"] == (
+        "2026-12-15T00:00:00.000000Z"
+    )
+    assert state["bookmarks"]["survey_definitions"]["parent_lastModified"] == (
+        parent_bookmark
+    )
 
 
 @pytest.mark.parametrize("response", [
