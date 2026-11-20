@@ -80,7 +80,10 @@ class Surveys(IncrementalStream):
         self.write_bookmark(pending_state, self.tap_stream_id, value=max_bookmark)
         # Empty question lists still complete the backfill for their surveys.
         for child in details:
-            child.write_bookmark(pending_state, child.tap_stream_id, value=max_bookmark)
+            if child.parent_replication_key:
+                child.write_bookmark(
+                    pending_state, child.tap_stream_id, value=max_bookmark
+                )
         state.clear()
         state.update(pending_state)
         return count

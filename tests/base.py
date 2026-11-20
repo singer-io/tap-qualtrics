@@ -260,7 +260,7 @@ class QualtricsBaseTest(BaseCase):
             "survey_definitions": {
                 cls.PRIMARY_KEYS: {"SurveyID"},
                 cls.REPLICATION_METHOD: cls.INCREMENTAL,
-                cls.REPLICATION_KEYS: {"lastModified"},
+                cls.REPLICATION_KEYS: {"LastModified"},
                 cls.OBEYS_START_DATE: True,
                 cls.API_LIMIT: 100
             },

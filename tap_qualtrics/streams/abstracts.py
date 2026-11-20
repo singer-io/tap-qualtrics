@@ -332,7 +332,9 @@ class SurveyChildStream(FullTableStream):
 
 
 class IncrementalSurveyChildStream(IncrementalStream):
-    """Incremental stream fetched once per survey; uses parent's lastModified as replication key."""
+    """Incremental stream fetched once per survey."""
+
+    parent_replication_key: Optional[str] = "lastModified"
 
     def __init__(self, client=None, catalog_entry=None) -> None:
         super().__init__(client=client, catalog_entry=catalog_entry)
@@ -351,7 +353,8 @@ class IncrementalSurveyChildStream(IncrementalStream):
         path = self.path.format(survey_id=survey_id)
         for record in self._paginate(path):
             record["survey_id"] = survey_id
-            record["lastModified"] = parent_bk
+            if self.parent_replication_key:
+                record[self.parent_replication_key] = parent_bk
             yield record
 
     def _make_probe_path(self, parent_record: Dict) -> str:

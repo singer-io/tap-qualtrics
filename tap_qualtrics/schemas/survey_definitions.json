@@ -144,13 +144,6 @@
                 "null",
                 "string"
             ]
-        },
-        "lastModified": {
-            "type": [
-                "null",
-                "string"
-            ],
-            "format": "date-time"
         }
     },
     "patternProperties": {
