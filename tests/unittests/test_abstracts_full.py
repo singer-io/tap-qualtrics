@@ -1,8 +1,10 @@
 """Comprehensive unit tests for all abstract stream base classes."""
 import unittest
+from datetime import UTC, datetime
 from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
+from tap_qualtrics.exceptions import QualtricsError
 from tap_qualtrics.streams.abstracts import (
     ContactChildStream,
     DirectoryChildStream,
@@ -16,6 +18,7 @@ from tap_qualtrics.streams.abstracts import (
     SegmentChildStream,
     SurveyChildStream,
     TicketChildStream,
+    _bookmark_datetime,
     _get_nested,
 )
 from tap_qualtrics.streams.contact_frequency_rules import ContactFrequencyRules
@@ -933,6 +936,28 @@ class TestTicketChildStream(unittest.TestCase):
 
     def test_probe_path_no_id(self):
         self.assertEqual(self._stream()._make_probe_path({}), "")
+
+
+# ---------------------------------------------------------------------------
+# _bookmark_datetime
+# ---------------------------------------------------------------------------
+
+class TestBookmarkDatetime(unittest.TestCase):
+
+    def test_naive_datetime_gets_utc_tzinfo(self):
+        naive = datetime(2024, 1, 1, 12, 0, 0)
+        result = _bookmark_datetime(naive)
+        self.assertEqual(result, naive.replace(tzinfo=UTC))
+
+    def test_aware_datetime_is_converted_to_utc(self):
+        from datetime import timedelta, timezone
+        aware = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone(timedelta(hours=5)))
+        result = _bookmark_datetime(aware)
+        self.assertEqual(result, aware.astimezone(UTC))
+
+    def test_invalid_string_raises_qualtrics_error(self):
+        with self.assertRaises(QualtricsError):
+            _bookmark_datetime("not-a-real-timestamp")
 
 
 if __name__ == "__main__":

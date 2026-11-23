@@ -9,6 +9,7 @@ from tap_qualtrics.exceptions import (
     QualtricsError,
     QualtricsForbiddenError,
     QualtricsPaginationError,
+    QualtricsRateLimitError,
 )
 from tap_qualtrics.streams.survey_response_export import SurveyResponseExport
 
@@ -103,6 +104,42 @@ class TestSurveyResponseExportGetRecords(unittest.TestCase):
         list(stream.get_records(parent_id={"id": "SV_1"}, bookmark="2021-06-01"))
         call_body = stream.client.post.call_args[0][1]
         self.assertEqual(call_body["startDate"], "2021-06-01")
+
+    def test_ndjson_content_type_skips_blank_lines(self):
+        """Line 244: blank line in NDJSON content-type streaming response is skipped."""
+        stream = self._stream()
+        stream.client.post.return_value = {"result": {"progressId": "pid1"}}
+        stream.client.poll_export.return_value = {"result": {"status": "complete", "fileId": "fid1"}}
+        file_resp = MagicMock()
+        file_resp.headers = {"Content-Type": "application/x-ndjson"}
+        file_resp.iter_lines.return_value = iter([
+            json.dumps({"responseId": "R_1", "values": {"recordedDate": "2021-01-01"}}),
+            "",
+            json.dumps({"responseId": "R_2", "values": {"recordedDate": "2021-01-02"}}),
+        ])
+        stream.client.get_file.return_value = file_resp
+
+        records = list(stream.get_records(parent_id={"id": "SV_1"}))
+
+        self.assertEqual(len(records), 2)
+
+    def test_record_count_mismatch_logs_warning(self):
+        """Line 270: reconciliation mismatch warning when emitted count != API-reported total."""
+        stream = self._stream()
+        stream.client.post.return_value = {"result": {"progressId": "pid1"}}
+        stream.client.poll_export.return_value = {
+            "result": {"status": "complete", "fileId": "fid1", "recordCount": 5}
+        }
+        file_resp = MagicMock()
+        responses = [{"responseId": "R_1", "values": {"recordedDate": "2021-01-01"}}]
+        file_resp.content = json.dumps({"responses": responses}).encode()
+        stream.client.get_file.return_value = file_resp
+
+        with patch("tap_qualtrics.streams.survey_response_export.LOGGER") as mock_logger:
+            records = list(stream.get_records(parent_id={"id": "SV_1"}))
+
+        self.assertEqual(len(records), 1)
+        mock_logger.warning.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -284,6 +321,17 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
         client.post.side_effect = QualtricsBackoffError("rate limited")
         entries, _ = SurveyResponseExport.discover_dynamic_entries(client)
         self.assertEqual(entries, [])
+
+    def test_rate_limited_survey_is_skipped(self):
+        """Lines 157 & 189: QualtricsRateLimitError from _fetch_records -> 'rate_limited' status skip."""
+        client = _make_client()
+        client.get.return_value = {"result": {"elements": [{"id": "SV_1"}]}}
+        client.post.side_effect = QualtricsRateLimitError("rate limited")
+
+        entries, skipped = SurveyResponseExport.discover_dynamic_entries(client)
+
+        self.assertEqual(entries, [])
+        self.assertEqual(skipped, ["SV_1"])
 
     def test_successful_discovery(self):
         client = _make_client()

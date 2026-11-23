@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 from tap_qualtrics.exceptions import (
     QualtricsBadRequestError,
     QualtricsError,
+    QualtricsRateLimitError,
     QualtricsUnprocessableEntityError,
 )
 from tap_qualtrics.streams.audit_export import AuditExport
@@ -157,6 +158,59 @@ class TestAuditExportGetRecords(unittest.TestCase):
         self.assertIn("id", records[0])
         self.assertTrue(records[0]["id"])
 
+    def test_ndjson_content_type_skips_blank_lines(self):
+        """Line 234: blank line in NDJSON content-type streaming response is skipped."""
+        stream = self._stream()
+        stream.client.post.return_value = {"result": {"id": "exp1"}}
+        stream.client.poll_export.return_value = {"result": {"status": "complete", "fileId": "f1"}}
+        file_resp = MagicMock()
+        file_resp.headers = {"Content-Type": "application/x-ndjson"}
+        file_resp.iter_lines.return_value = iter([
+            '{"id": "e1", "timestamp": "2021-01-01"}',
+            "",
+            '{"id": "e2", "timestamp": "2021-01-02"}',
+        ])
+        stream.client.get_file.return_value = file_resp
+
+        records = list(stream.get_records(parent_id={"name": "login"}))
+
+        self.assertEqual(len(records), 2)
+
+    def test_record_count_mismatch_logs_warning_file_fallback(self):
+        """Line 261: reconciliation mismatch warning in NDJSON-file fallback branch."""
+        stream = self._stream()
+        stream.client.post.return_value = {"result": {"id": "exp1"}}
+        stream.client.poll_export.return_value = {
+            "result": {"status": "complete", "fileId": "f1", "recordCount": 5}
+        }
+        file_resp = MagicMock()
+        file_resp.content = b'{"id": "e1", "timestamp": "2021-01-01"}\n'
+        stream.client.get_file.return_value = file_resp
+
+        with patch("tap_qualtrics.streams.audit_export.LOGGER") as mock_logger:
+            records = list(stream.get_records(parent_id={"name": "login"}))
+
+        self.assertEqual(len(records), 1)
+        mock_logger.warning.assert_called_once()
+
+    def test_record_count_mismatch_logs_warning_json_list_fallback(self):
+        """Line 290: reconciliation mismatch warning after resp.json() list fallback."""
+        stream = self._stream()
+        stream.client.post.return_value = {"result": {"id": "exp1"}}
+        stream.client.poll_export.return_value = {
+            "result": {"status": "complete", "fileId": "f1", "recordCount": 3}
+        }
+        file_resp = MagicMock()
+        file_resp.content = b"not-json"
+        file_resp.json.return_value = [{"id": "e1", "timestamp": "2021-01-01"}]
+        stream.client.get_file.return_value = file_resp
+
+        with patch("tap_qualtrics.streams.audit_export.LOGGER") as mock_logger:
+            records = list(stream.get_records(parent_id="login"))
+
+        self.assertEqual(len(records), 1)
+        mock_logger.warning.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # sync
@@ -274,6 +328,18 @@ class TestAuditExportDiscoverDynamicEntries(unittest.TestCase):
         self.assertEqual(entries, [])
         self.assertEqual(skipped, ["login"])
         self.assertEqual(client.post.call_count, 1)
+
+    @patch("time.sleep")
+    def test_rate_limited_event_type_is_skipped(self, _mock_sleep):
+        """Lines 146 & 179: QualtricsRateLimitError from _fetch_records -> 'rate_limited' status skip."""
+        client = _make_client()
+        client.get.return_value = {"result": {"elements": [{"name": "login"}]}}
+        client.post.side_effect = QualtricsRateLimitError("rate limited")
+
+        entries, skipped = AuditExport.discover_dynamic_entries(client)
+
+        self.assertEqual(entries, [])
+        self.assertEqual(skipped, ["login"])
 
     def test_deduplicates_event_jobs_within_discovery(self):
         client = _make_client()
