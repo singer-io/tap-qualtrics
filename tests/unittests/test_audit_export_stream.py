@@ -1,16 +1,16 @@
 """Unit tests for tap_qualtrics/streams/audit_export.py."""
 import io
 import json
-import zipfile
 import unittest
+import zipfile
 from unittest.mock import MagicMock, patch
 
-from tap_qualtrics.streams.audit_export import AuditExport
 from tap_qualtrics.exceptions import (
     QualtricsBadRequestError,
     QualtricsError,
     QualtricsUnprocessableEntityError,
 )
+from tap_qualtrics.streams.audit_export import AuditExport
 
 
 def _make_client():
@@ -322,7 +322,7 @@ class TestAuditExportDiscoverDynamicEntries(unittest.TestCase):
         client.get.return_value = {"result": {"elements": [{"name": "login"}]}}
         client.post.side_effect = Exception("unexpected")
 
-        with self.assertRaises(Exception):
+        with self.assertRaises(Exception):  # noqa: B017 - asserting generic Exception propagates unmodified
             AuditExport.discover_dynamic_entries(client)
 
     def test_no_records_skips_event_type(self):

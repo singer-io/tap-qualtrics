@@ -1,15 +1,18 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from typing import ClassVar
+from unittest.mock import MagicMock, patch
+
 import pytest
 import singer
+
 from tap_qualtrics.exceptions import QualtricsError
 from tap_qualtrics.streams.abstracts import IncrementalStream
 
 
 class ConcreteIncrementalStream(IncrementalStream):
     tap_stream_id = "stream_1"
-    key_properties = ["id"]
-    replication_keys = ["updated_at"]
+    key_properties: ClassVar = ["id"]
+    replication_keys: ClassVar = ["updated_at"]
     replication_method = "INCREMENTAL"
 
 

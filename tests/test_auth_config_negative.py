@@ -1,8 +1,7 @@
 import os
 
-from tap_tester import connections
-
 from base import QualtricsBaseTest
+from tap_tester import connections
 
 
 class QualtricsAuthConfigNegativeIntegrationTest(QualtricsBaseTest):

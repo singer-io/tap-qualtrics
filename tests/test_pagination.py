@@ -1,8 +1,8 @@
 import math
 import re
 
-from tap_tester import connections, runner
 from base import QualtricsBaseTest
+from tap_tester import connections, runner
 
 
 class QualtricsPaginationTest(QualtricsBaseTest):
@@ -84,9 +84,7 @@ class QualtricsPaginationTest(QualtricsBaseTest):
                 record_count = record_count_by_stream.get(stream, 0)
                 if record_count <= page_limit:
                     insufficient_streams.append(
-                        "{}: {} record(s) with effective page size {}".format(
-                            stream, record_count, page_limit
-                        )
+                        f"{stream}: {record_count} record(s) with effective page size {page_limit}"
                     )
                     continue
 
@@ -97,23 +95,17 @@ class QualtricsPaginationTest(QualtricsBaseTest):
                     api_page_requests,
                     expected_min_pages,
                     msg=(
-                        "Expected at least {} API page requests for stream '{}' "
-                        "(record_count={}, effective_page_size={}) but observed {}."
-                    ).format(
-                        expected_min_pages,
-                        stream,
-                        record_count,
-                        page_limit,
-                        api_page_requests,
+                        f"Expected at least {expected_min_pages} API page requests for stream '{stream}' "
+                        f"(record_count={record_count}, effective_page_size={page_limit}) but observed {api_page_requests}."
                     ),
                 )
                 exercised_streams.append(stream)
 
         if insufficient_streams:
             self.fail(
-                "Pagination was not exercised for stream(s): {}. "
+                f"Pagination was not exercised for stream(s): {insufficient_streams}. "
                 "Seed additional records for these streams or reduce page_size further."
-                .format(insufficient_streams)
+                
             )
 
         self.assertGreater(

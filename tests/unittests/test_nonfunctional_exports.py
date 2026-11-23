@@ -8,7 +8,6 @@ from unittest.mock import MagicMock
 from tap_qualtrics.streams.audit_export import AuditExport
 from tap_qualtrics.streams.survey_response_export import SurveyResponseExport
 
-
 BASELINES_PATH = Path(__file__).resolve().parents[1] / "fixtures" / "nonfunctional_export_baselines.json"
 BASELINES = json.loads(BASELINES_PATH.read_text(encoding="utf-8"))
 

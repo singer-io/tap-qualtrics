@@ -1,4 +1,5 @@
 import unittest
+from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
 from parameterized import parameterized
@@ -37,23 +38,23 @@ def _make_entry():
 
 class ConcreteFullTable(FullTableStream):
     tap_stream_id = "resilience_full_table"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     data_key = "result.elements"
     path = "resilience/full"
 
 
 class ConcreteIncremental(IncrementalStream):
     tap_stream_id = "resilience_incremental"
-    key_properties = ["id"]
-    replication_keys = ["updatedAt"]
+    key_properties: ClassVar = ["id"]
+    replication_keys: ClassVar = ["updatedAt"]
     data_key = "result.elements"
     path = "resilience/incremental"
 
 
 class ConcreteChildBase(ChildBaseStream):
     tap_stream_id = "resilience_child_base"
-    key_properties = ["id"]
-    replication_keys = ["updatedAt"]
+    key_properties: ClassVar = ["id"]
+    replication_keys: ClassVar = ["updatedAt"]
     data_key = "result.elements"
 
     def get_url_endpoint(self, _parent_obj=None):

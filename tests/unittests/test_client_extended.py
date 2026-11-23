@@ -1,6 +1,6 @@
 """Extended tests for tap_qualtrics/client.py covering remaining paths."""
 import unittest
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 from tap_qualtrics.client import Client, raise_for_error, wait_if_retry_after
@@ -61,7 +61,7 @@ class TestRaiseForError(unittest.TestCase):
         resp = MagicMock()
         resp.status_code = 500
         resp.json.side_effect = ValueError("not json")
-        with self.assertRaises(Exception):
+        with self.assertRaises(Exception):  # noqa: B017 - raise_for_error may raise any exception type
             raise_for_error(resp)
 
     def test_unknown_status_uses_qualtrics_error(self):
@@ -90,7 +90,7 @@ class TestObtainOAuthToken(unittest.TestCase):
         c = Client(_OAUTH_CONFIG)
         c.access_token = "existing_token"
         # Set expiry far in the future so it's still valid
-        c._Client__expires = datetime.now(timezone.utc) + timedelta(hours=1)
+        c._Client__expires = datetime.now(UTC) + timedelta(hours=1)
         c._session = MagicMock()
         c._obtain_oauth_token()
         c._session.post.assert_not_called()
@@ -164,7 +164,7 @@ class TestMakeRequest401Retry(unittest.TestCase):
             return ok_resp
 
         with patch.object(c, "_make_request", side_effect=side_effect):
-            result = c.make_request("GET", "https://iad1.qualtrics.com/API/v3/users")
+            c.make_request("GET", "https://iad1.qualtrics.com/API/v3/users")
 
         self.assertEqual(call_count[0], 2)
 
@@ -183,9 +183,8 @@ class TestPollExportFailedStatus(unittest.TestCase):
         resp = MagicMock()
         resp.status_code = 200
         resp.json.return_value = {"result": {"status": "failed"}}
-        with patch.object(c._session, "request", return_value=resp):
-            with self.assertRaises(QualtricsError):
-                c.poll_export("audit-exports/exp1")
+        with patch.object(c._session, "request", return_value=resp), self.assertRaises(QualtricsError):
+            c.poll_export("audit-exports/exp1")
 
     @patch.object(Client, "_obtain_oauth_token")
     def test_cancelled_status_raises(self, mock_oauth):
@@ -195,9 +194,8 @@ class TestPollExportFailedStatus(unittest.TestCase):
         resp = MagicMock()
         resp.status_code = 200
         resp.json.return_value = {"result": {"status": "cancelled"}}
-        with patch.object(c._session, "request", return_value=resp):
-            with self.assertRaises(QualtricsError):
-                c.poll_export("audit-exports/exp1")
+        with patch.object(c._session, "request", return_value=resp), self.assertRaises(QualtricsError):
+            c.poll_export("audit-exports/exp1")
 
     @patch.object(Client, "_obtain_oauth_token")
     def test_completed_status_ok(self, mock_oauth):
@@ -228,9 +226,8 @@ class TestMakeRequest429(unittest.TestCase):
         resp.status_code = 429
         resp.headers = {"Retry-After": "0"}
         resp.json.return_value = {}
-        with patch.object(c._session, "request", return_value=resp):
-            with self.assertRaises(QualtricsRateLimitError):
-                c._make_request("GET", "https://iad1.qualtrics.com/API/v3/users")
+        with patch.object(c._session, "request", return_value=resp), self.assertRaises(QualtricsRateLimitError):
+            c._make_request("GET", "https://iad1.qualtrics.com/API/v3/users")
 
 
 class TestMakeRequest500(unittest.TestCase):
@@ -300,9 +297,8 @@ class TestClientContextManager(unittest.TestCase):
             "access_token": "tok123",
             "expires_in": 3600,
         }
-        with patch("requests.Session.post", return_value=mock_resp):
-            with Client(_OAUTH_CONFIG) as c:
-                self.assertEqual(c.access_token, "tok123")
+        with patch("requests.Session.post", return_value=mock_resp), Client(_OAUTH_CONFIG) as c:
+            self.assertEqual(c.access_token, "tok123")
 
     def test_exit_closes_session(self):
         with patch.object(Client, "_obtain_oauth_token"):

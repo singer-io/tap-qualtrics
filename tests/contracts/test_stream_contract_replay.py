@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -10,7 +10,6 @@ from parameterized import parameterized
 
 from tap_qualtrics.client import Client
 from tap_qualtrics.streams import STREAMS
-
 from tests.contracts.contract_harness import (
     assert_stream_fixture_coverage,
     build_selected_catalog,
@@ -19,14 +18,13 @@ from tests.contracts.contract_harness import (
     validate_emitted_records_against_schemas,
 )
 
-
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "contracts"
 STREAM_NAMES = static_stream_names(STREAMS)
 
 
 def _scrub_request(request):
     headers = dict(request.headers or {})
-    if "authorization" in {key.lower() for key in headers.keys()}:
+    if "authorization" in {key.lower() for key in headers}:
         for key in list(headers.keys()):
             if key.lower() == "authorization":
                 headers[key] = "<REDACTED>"
@@ -65,7 +63,7 @@ def _build_replay_client() -> Client:
     }
     client = Client(config)
     client.access_token = "fixture-token"
-    client._Client__expires = datetime.now(timezone.utc) + timedelta(hours=1)  # pylint: disable=protected-access
+    client._Client__expires = datetime.now(UTC) + timedelta(hours=1)  # pylint: disable=protected-access
     return client
 
 

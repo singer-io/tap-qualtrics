@@ -119,11 +119,11 @@ class TestLoadSchemaReferences(unittest.TestCase):
         import json as _json
         from unittest.mock import mock_open
         fake_content = _json.dumps({"type": "object"})
-        with patch("tap_qualtrics.schema.os.path.exists", return_value=True):
-            with patch("tap_qualtrics.schema.os.listdir", return_value=["shared.json"]):
-                with patch("tap_qualtrics.schema.os.path.isfile", return_value=True):
-                    with patch("builtins.open", mock_open(read_data=fake_content)):
-                        refs = load_schema_references()
+        with patch("tap_qualtrics.schema.os.path.exists", return_value=True), \
+             patch("tap_qualtrics.schema.os.listdir", return_value=["shared.json"]), \
+             patch("tap_qualtrics.schema.os.path.isfile", return_value=True), \
+             patch("builtins.open", mock_open(read_data=fake_content)):
+            refs = load_schema_references()
         self.assertIn("shared/shared.json", refs)
 
 

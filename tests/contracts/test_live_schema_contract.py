@@ -9,14 +9,12 @@ from parameterized import parameterized
 
 from tap_qualtrics.client import Client
 from tap_qualtrics.streams import STREAMS
-
 from tests.contracts.contract_harness import (
     build_selected_catalog,
     run_sync_collect_records,
     static_stream_names,
     validate_emitted_records_against_schemas,
 )
-
 
 STREAM_NAMES = static_stream_names(STREAMS)
 

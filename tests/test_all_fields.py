@@ -47,6 +47,6 @@ class QualtricsAllFields(AllFieldsTest, QualtricsBaseTest):
                     set(),
                     unexpected_fields,
                     msg=(
-                        "Stream '{}' emitted field(s) not present in the selected catalog/schema: {}"
-                    ).format(stream, sorted(unexpected_fields)),
+                        f"Stream '{stream}' emitted field(s) not present in the selected catalog/schema: {sorted(unexpected_fields)}"
+                    ),
                 )

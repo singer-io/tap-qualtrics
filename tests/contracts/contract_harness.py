@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Tuple
 from unittest.mock import patch
 
 from jsonschema import Draft4Validator, FormatChecker
@@ -11,7 +11,6 @@ from singer import metadata
 from tap_qualtrics.discover import discover
 from tap_qualtrics.schema import get_schemas
 from tap_qualtrics.sync import sync
-
 
 DYNAMIC_STREAM_BASES = {"audit_export", "survey_response_export"}
 
@@ -39,12 +38,12 @@ def build_selected_catalog(client, stream_name: str):
 def run_sync_collect_records(
     client,
     catalog,
-    state: Dict | None = None,
-) -> Tuple[Dict[str, List[Dict]], Dict]:
+    state: dict | None = None,
+) -> tuple[dict[str, list[dict]], dict]:
     state = state or {}
     state.setdefault("bookmarks", {})
 
-    emitted: Dict[str, List[Dict]] = defaultdict(list)
+    emitted: dict[str, list[dict]] = defaultdict(list)
 
     def _capture(stream_id, record):
         emitted[stream_id].append(record)
@@ -57,7 +56,7 @@ def run_sync_collect_records(
     return emitted, state
 
 
-def static_stream_names(streams_map: Mapping[str, object]) -> Tuple[str, ...]:
+def static_stream_names(streams_map: Mapping[str, object]) -> tuple[str, ...]:
     return tuple(
         name for name in sorted(streams_map.keys())
         if name not in DYNAMIC_STREAM_BASES
@@ -65,7 +64,7 @@ def static_stream_names(streams_map: Mapping[str, object]) -> Tuple[str, ...]:
 
 
 def validate_emitted_records_against_schemas(
-    emitted: Mapping[str, Iterable[Dict]],
+    emitted: Mapping[str, Iterable[dict]],
     catalog,
 ) -> None:
     static_schemas, _ = get_schemas()
@@ -95,7 +94,7 @@ def cassette_file_path(fixtures_dir: Path, stream_name: str) -> Path:
     return fixtures_dir / f"{stream_name}.yaml"
 
 
-def assert_stream_fixture_coverage(fixtures_dir: Path, stream_names: Iterable[str]) -> List[str]:
+def assert_stream_fixture_coverage(fixtures_dir: Path, stream_names: Iterable[str]) -> list[str]:
     missing = []
     for stream_name in stream_names:
         if not cassette_file_path(fixtures_dir, stream_name).exists():

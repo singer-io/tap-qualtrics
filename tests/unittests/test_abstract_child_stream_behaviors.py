@@ -1,4 +1,5 @@
 import unittest
+from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
 from tap_qualtrics.exceptions import QualtricsInternalServerError
@@ -32,39 +33,39 @@ def _make_entry():
 
 class ConcreteIncrementalSurveyChild(IncrementalSurveyChildStream):
     tap_stream_id = "incr_survey_child_test"
-    key_properties = ["id"]
-    replication_keys = ["lastModified"]
+    key_properties: ClassVar = ["id"]
+    replication_keys: ClassVar = ["lastModified"]
     data_key = "result.elements"
     path = "surveys/{survey_id}/children"
 
 
 class ConcreteIncrementalMailingListChild(IncrementalMailingListChildStream):
     tap_stream_id = "incr_mailing_child_test"
-    key_properties = ["id"]
-    replication_keys = ["lastModifiedDate"]
+    key_properties: ClassVar = ["id"]
+    replication_keys: ClassVar = ["lastModifiedDate"]
     data_key = "result.elements"
     path = "directories/{directory_id}/mailinglists/{mailing_list_id}/records"
 
 
 class ConcreteIncrementalSegmentChild(IncrementalSegmentChildStream):
     tap_stream_id = "incr_segment_child_test"
-    key_properties = ["id"]
-    replication_keys = ["lastModifiedDate"]
+    key_properties: ClassVar = ["id"]
+    replication_keys: ClassVar = ["lastModifiedDate"]
     data_key = "result.elements"
     path = "directories/{directory_id}/segments/{segment_id}/records"
 
 
 class ConcreteChildBaseDefault(ChildBaseStream):
     tap_stream_id = "child_base_default"
-    key_properties = ["id"]
-    replication_keys = ["updatedAt"]
+    key_properties: ClassVar = ["id"]
+    replication_keys: ClassVar = ["updatedAt"]
     data_key = "result.elements"
 
 
 class ConcreteChildBaseSync(ChildBaseStream):
     tap_stream_id = "child_base_sync"
-    key_properties = ["id"]
-    replication_keys = ["updatedAt"]
+    key_properties: ClassVar = ["id"]
+    replication_keys: ClassVar = ["updatedAt"]
     data_key = "result.elements"
 
     def get_url_endpoint(self, _parent_obj=None):
@@ -73,8 +74,8 @@ class ConcreteChildBaseSync(ChildBaseStream):
 
 class NoReplicationIncremental(IncrementalStream):
     tap_stream_id = "no_replication"
-    key_properties = ["id"]
-    replication_keys = []
+    key_properties: ClassVar = ["id"]
+    replication_keys: ClassVar = []
     data_key = "result.elements"
     path = "x"
 
@@ -193,9 +194,8 @@ class TestAbstractChildBehaviors(unittest.TestCase):
             stream,
             "_paginate",
             side_effect=QualtricsInternalServerError("500"),
-        ):
-            with self.assertRaises(QualtricsInternalServerError):
-                list(stream.get_records(parent_id={"id": "P1"}, bookmark=""))
+        ), self.assertRaises(QualtricsInternalServerError):
+            list(stream.get_records(parent_id={"id": "P1"}, bookmark=""))
 
         self.assertTrue(mock_logger.warning.called)
 

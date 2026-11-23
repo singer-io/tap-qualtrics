@@ -1,5 +1,6 @@
 """Comprehensive unit tests for all abstract stream base classes."""
 import unittest
+from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
 from tap_qualtrics.streams.abstracts import (
@@ -18,7 +19,6 @@ from tap_qualtrics.streams.abstracts import (
     _get_nested,
 )
 from tap_qualtrics.streams.contact_frequency_rules import ContactFrequencyRules
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -70,7 +70,7 @@ class TestGetNested(unittest.TestCase):
 
 class ConcreteFullTable(FullTableStream):
     tap_stream_id = "test_full"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     data_key = "result.elements"
     path = "test-resource"
     page_size = 100
@@ -186,7 +186,7 @@ class TestBaseStreamHelpers(unittest.TestCase):
     def test_page_size_capped_at_stream_class(self):
         class SmallStream(FullTableStream):
             tap_stream_id = "small"
-            key_properties = ["id"]
+            key_properties: ClassVar = ["id"]
             data_key = "result.elements"
             path = "x"
             page_size = 5
@@ -205,7 +205,7 @@ class TestPagination(unittest.TestCase):
     def _full_table(self, data_key="result.elements"):
         class S(FullTableStream):
             tap_stream_id = "pag_test"
-            key_properties = ["id"]
+            key_properties: ClassVar = ["id"]
             page_size = 10
             path = "res"
 
@@ -285,8 +285,8 @@ class TestFullTableSync(unittest.TestCase):
 
 class ConcreteIncremental(IncrementalStream):
     tap_stream_id = "incr_test"
-    key_properties = ["id"]
-    replication_keys = ["updated_at"]
+    key_properties: ClassVar = ["id"]
+    replication_keys: ClassVar = ["updated_at"]
     data_key = "result.elements"
     path = "res"
     page_size = 100
@@ -504,7 +504,7 @@ class TestIncrementalStream(unittest.TestCase):
 
 class ConcreteSurveyChild(SurveyChildStream):
     tap_stream_id = "survey_child_test"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     data_key = "result.elements"
     path = "surveys/{survey_id}/questions"
     page_size = 100
@@ -540,7 +540,7 @@ class TestSurveyChildStream(unittest.TestCase):
 
 class ConcreteDirectoryChild(DirectoryChildStream):
     tap_stream_id = "dir_child_test"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     data_key = "result.elements"
     path = "directories/{directory_id}/contacts"
     page_size = 100
@@ -582,8 +582,8 @@ class TestDirectoryChildStream(unittest.TestCase):
 
 class ConcreteIncrementalDirChild(IncrementalDirectoryChildStream):
     tap_stream_id = "incr_dir_child_test"
-    key_properties = ["id"]
-    replication_keys = ["lastModified"]
+    key_properties: ClassVar = ["id"]
+    replication_keys: ClassVar = ["lastModified"]
     data_key = "result.elements"
     path = "directories/{directory_id}/lists"
     page_size = 100
@@ -630,7 +630,7 @@ class TestIncrementalDirectoryChildStream(unittest.TestCase):
 
 class ConcreteMailingListChild(MailingListChildStream):
     tap_stream_id = "ml_child_test"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     data_key = "result.elements"
     path = "directories/{directory_id}/mailinglists/{mailing_list_id}/contacts"
     page_size = 100
@@ -681,7 +681,7 @@ class TestMailingListChildStream(unittest.TestCase):
 
 class ConcreteGroupChild(GroupChildStream):
     tap_stream_id = "grp_child_test"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     data_key = "result.elements"
     path = "groups/{group_id}/members"
     page_size = 100
@@ -716,7 +716,7 @@ class TestGroupChildStream(unittest.TestCase):
 
 class ConcreteLibraryChild(LibraryChildStream):
     tap_stream_id = "lib_child_test"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     data_key = "result.elements"
     path = "libraries/{library_id}/messages"
     page_size = 100
@@ -754,7 +754,7 @@ class TestLibraryChildStream(unittest.TestCase):
 
 class ConcreteSampleChild(SampleChildStream):
     tap_stream_id = "sample_child_test"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     data_key = "result.elements"
     path = "directories/{directory_id}/samples/{sample_id}/contacts"
     page_size = 100
@@ -799,7 +799,7 @@ class TestSampleChildStream(unittest.TestCase):
 
 class ConcreteSegmentChild(SegmentChildStream):
     tap_stream_id = "seg_child_test"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     data_key = "result.elements"
     path = "directories/{directory_id}/segments/{segment_id}/contacts"
     page_size = 100
@@ -844,7 +844,7 @@ class TestSegmentChildStream(unittest.TestCase):
 
 class ConcreteContactChild(ContactChildStream):
     tap_stream_id = "contact_child_test"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     data_key = "result.elements"
     path = "directories/{directory_id}/contacts/{contact_id}/transactions"
     page_size = 100
@@ -889,7 +889,7 @@ class TestContactChildStream(unittest.TestCase):
 
 class ConcreteTicketChild(TicketChildStream):
     tap_stream_id = "ticket_child_test"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     data_key = "result.elements"
     path = "tickets/{ticket_id}/root-causes"
     page_size = 100

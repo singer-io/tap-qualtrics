@@ -16,7 +16,6 @@ from tap_qualtrics.streams.survey_flows import SurveyFlows
 from tap_qualtrics.streams.survey_questions import SurveyQuestions
 from tap_qualtrics.sync import sync
 
-
 SURVEY_ID = "SV_1"
 LAST_MODIFIED = "2026-11-04T10:00:00Z"
 PARENT = {"id": SURVEY_ID, "lastModified": LAST_MODIFIED}
@@ -413,9 +412,9 @@ def test_incomplete_question_response_preserves_all_bookmarks(response, later_pa
     initial = copy.deepcopy(state["bookmarks"])
     with patch("tap_qualtrics.streams.abstracts.write_record"), \
             patch("tap_qualtrics.streams.abstracts.write_schema"), \
-            patch("singer.write_state") as write_state:
-        with pytest.raises(QualtricsError, match="survey_questions"):
-            sync(client, client.config, _selected_catalog({"survey_questions"}), state)
+            patch("singer.write_state") as write_state, \
+            pytest.raises(QualtricsError, match="survey_questions"):
+        sync(client, client.config, _selected_catalog({"survey_questions"}), state)
     assert state["bookmarks"] == initial
     assert all(call.args[0]["bookmarks"] == initial for call in write_state.call_args_list)
 

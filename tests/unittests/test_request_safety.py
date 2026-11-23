@@ -8,7 +8,6 @@ from tap_qualtrics.client import Client
 from tap_qualtrics.exceptions import QualtricsError
 from tap_qualtrics.streams.abstracts import FullTableStream
 
-
 CONFIG = {
     "data_center": "sjc1",
     "client_id": "test-client",
@@ -23,9 +22,9 @@ ORIGIN = "https://sjc1.qualtrics.com"
     "sjc1#fragment", "sjc1\\host", "sjc1\n", "-sjc1", "sjc1-", "a" * 64,
 ])
 def test_invalid_data_center_rejected_before_network(data_center):
-    with patch("tap_qualtrics.client.requests.Session") as session:
-        with pytest.raises(QualtricsError, match="Invalid data_center"):
-            Client({**CONFIG, "data_center": data_center})
+    with patch("tap_qualtrics.client.requests.Session") as session, \
+            pytest.raises(QualtricsError, match="Invalid data_center"):
+        Client({**CONFIG, "data_center": data_center})
     session.assert_not_called()
 
 
@@ -56,9 +55,9 @@ def test_valid_data_center_label(data_center):
 def test_untrusted_full_url_rejected_before_authentication(url, method):
     client = Client(CONFIG)
     with patch.object(client, "_obtain_oauth_token") as auth, \
-            patch.object(client._session, "request") as request:
-        with pytest.raises(QualtricsError, match="Refusing request"):
-            getattr(client, method)("surveys", full_url=url)
+            patch.object(client._session, "request") as request, \
+            pytest.raises(QualtricsError, match="Refusing request"):
+        getattr(client, method)("surveys", full_url=url)
     auth.assert_not_called()
     request.assert_not_called()
 
@@ -86,9 +85,9 @@ def test_oauth_redirects_not_followed(flow, status):
     client = Client({**CONFIG, "auth_method": flow, "refresh_token": "test-refresh"})
     response = MagicMock(status_code=status)
     response.headers = {"Location": "https://attacker.example/token"}
-    with patch.object(client._session, "post", return_value=response) as post:
-        with pytest.raises(QualtricsError, match=f"HTTP {status}"):
-            client._obtain_oauth_token()
+    with patch.object(client._session, "post", return_value=response) as post, \
+            pytest.raises(QualtricsError, match=f"HTTP {status}"):
+        client._obtain_oauth_token()
     post.assert_called_once()
     assert post.call_args.args == (ORIGIN + "/oauth2/token",)
     assert post.call_args.kwargs["allow_redirects"] is False
@@ -100,9 +99,9 @@ def test_oauth_redirects_not_followed(flow, status):
 def test_oauth_destination_checked_at_request_time(flow):
     client = Client({**CONFIG, "auth_method": flow, "refresh_token": "test-refresh"})
     client.oauth_token_endpoint = "https://attacker.example/token"
-    with patch.object(client._session, "post") as post:
-        with pytest.raises(QualtricsError, match="Refusing request"):
-            client._obtain_oauth_token()
+    with patch.object(client._session, "post") as post, \
+            pytest.raises(QualtricsError, match="Refusing request"):
+        client._obtain_oauth_token()
     post.assert_not_called()
 
 
@@ -113,9 +112,9 @@ def test_api_redirects_are_errors(method, status):
     response = MagicMock(status_code=status)
     response.json.return_value = {}
     with patch.object(client, "_obtain_oauth_token"), \
-            patch.object(client._session, "request", return_value=response) as request:
-        with pytest.raises(QualtricsError):
-            client.make_request(method, ORIGIN + "/API/v3/surveys")
+            patch.object(client._session, "request", return_value=response) as request, \
+            pytest.raises(QualtricsError):
+        client.make_request(method, ORIGIN + "/API/v3/surveys")
     request.assert_called_once()
     assert request.call_args.kwargs["allow_redirects"] is False
 
@@ -144,9 +143,9 @@ def test_pagination_rejects_external_link_without_second_request():
         "result": {"elements": [], "nextPage": "https://attacker.example/page"},
     }
     with patch.object(client, "_obtain_oauth_token") as auth, \
-            patch.object(client._session, "request", return_value=response) as request:
-        with pytest.raises(QualtricsError, match="Refusing request"):
-            list(FullTableStream(client=client)._paginate("surveys"))
+            patch.object(client._session, "request", return_value=response) as request, \
+            pytest.raises(QualtricsError, match="Refusing request"):
+        list(FullTableStream(client=client)._paginate("surveys"))
     assert auth.call_count == 1
     request.assert_called_once()
 

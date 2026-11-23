@@ -2,7 +2,7 @@ import base64
 import json
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -44,7 +44,7 @@ class TestAuthorizationCodeClientHelpers(unittest.TestCase):
 
     def test_fork_copies_config_path_access_token_and_expiry(self):
         client = Client(self._config(), config_path="config.json")
-        client._Client__expires = datetime.now(timezone.utc) + timedelta(minutes=5)
+        client._Client__expires = datetime.now(UTC) + timedelta(minutes=5)
 
         clone = client.fork()
 
@@ -142,7 +142,7 @@ class TestAuthorizationCodeClientHelpers(unittest.TestCase):
         )
         self.assertEqual(config["access_token"], "new-access")
         self.assertEqual(config["refresh_token"], "new-refresh")
-        self.assertGreater(client._Client__expires, datetime.now(timezone.utc))
+        self.assertGreater(client._Client__expires, datetime.now(UTC))
 
     @patch.object(Client, "_refresh_authorization_code_token")
     def test_obtain_oauth_token_uses_configured_access_token(self, mock_refresh):

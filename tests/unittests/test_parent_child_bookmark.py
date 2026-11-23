@@ -1,21 +1,23 @@
 """Tests for parent-child stream bookmark propagation via sync.py."""
 import unittest
+from typing import ClassVar
 from unittest.mock import MagicMock, patch
+
 from tap_qualtrics.streams.abstracts import FullTableStream
 
 
 class ConcreteParent(FullTableStream):
     tap_stream_id = "parent_stream"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     replication_method = "FULL_TABLE"
     data_key = "result.elements"
     path = "parent-resource"
-    children = ["child_stream"]
+    children: ClassVar = ["child_stream"]
 
 
 class ConcreteChild(FullTableStream):
     tap_stream_id = "child_stream"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     replication_method = "FULL_TABLE"
     data_key = "result.elements"
     parent = "parent_stream"

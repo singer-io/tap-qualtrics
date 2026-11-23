@@ -3,9 +3,8 @@ from unittest.mock import MagicMock
 
 import requests
 
-from tap_qualtrics.client import Client, QUALTRICS_SCOPE
+from tap_qualtrics.client import QUALTRICS_SCOPE, Client
 from tap_qualtrics.exceptions import QualtricsError, QualtricsForbiddenError
-
 
 BASE_CONFIG = {
     "client_id": "cid",
@@ -44,9 +43,8 @@ class TestClientNegativeAuthAndConfig(unittest.TestCase):
         client = Client(config)
         client._session.post = MagicMock(return_value=response)
 
-        with self.assertRaises(QualtricsError) as context:
-            with client:
-                pass
+        with self.assertRaises(QualtricsError) as context, client:
+            pass
 
         self.assertIn("Failed to obtain OAuth2 token", str(context.exception))
 
@@ -58,9 +56,8 @@ class TestClientNegativeAuthAndConfig(unittest.TestCase):
             side_effect=requests.exceptions.ConnectionError("host not found")
         )
 
-        with self.assertRaises(QualtricsError) as context:
-            with client:
-                pass
+        with self.assertRaises(QualtricsError) as context, client:
+            pass
 
         self.assertIn("Failed to obtain OAuth2 token", str(context.exception))
 
@@ -75,9 +72,8 @@ class TestClientNegativeAuthAndConfig(unittest.TestCase):
             )
         )
 
-        with client:
-            with self.assertRaises(QualtricsForbiddenError) as context:
-                client.get("surveys")
+        with client, self.assertRaises(QualtricsForbiddenError) as context:
+            client.get("surveys")
 
         self.assertIn("required scopes", str(context.exception))
 
@@ -96,9 +92,8 @@ class TestClientNegativeAuthAndConfig(unittest.TestCase):
             )
         )
 
-        with client:
-            with self.assertRaises(QualtricsForbiddenError) as context:
-                client.get("surveys")
+        with client, self.assertRaises(QualtricsForbiddenError) as context:
+            client.get("surveys")
 
         self.assertIn("required scopes", str(context.exception))
 
@@ -116,9 +111,8 @@ class TestClientNegativeAuthAndConfig(unittest.TestCase):
         client = Client(config)
         client._session.post = MagicMock(return_value=response)
 
-        with self.assertRaises(QualtricsError) as context:
-            with client:
-                pass
+        with self.assertRaises(QualtricsError) as context, client:
+            pass
 
         self.assertIn("Failed to refresh OAuth2 token", str(context.exception))
 

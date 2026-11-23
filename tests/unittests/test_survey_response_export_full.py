@@ -3,7 +3,6 @@ import json
 import unittest
 from unittest.mock import MagicMock, patch
 
-from tap_qualtrics.streams.survey_response_export import SurveyResponseExport
 from tap_qualtrics.exceptions import (
     QualtricsBackoffError,
     QualtricsBadGatewayError,
@@ -11,6 +10,7 @@ from tap_qualtrics.exceptions import (
     QualtricsForbiddenError,
     QualtricsPaginationError,
 )
+from tap_qualtrics.streams.survey_response_export import SurveyResponseExport
 
 
 def _make_client():
@@ -138,12 +138,12 @@ class TestSurveyResponseExportSync(unittest.TestCase):
         stream = self._stream()
         records = [{"responseId": "R_1", "recorded_date": "2021-06-01"}]
 
-        with patch("tap_qualtrics.streams.survey_response_export.get_bookmark", return_value="2021-01-01"):
-            with patch("singer.write_bookmark") as mock_wb:
-                with patch.object(stream, "get_records", return_value=iter(records)):
-                    transformer = MagicMock()
-                    transformer.transform.side_effect = lambda r, *a, **kw: r
-                    stream.sync(state={}, transformer=transformer, parent_id={"id": "SV_1"})
+        with patch("tap_qualtrics.streams.survey_response_export.get_bookmark", return_value="2021-01-01"), \
+                patch("singer.write_bookmark"), \
+                patch.object(stream, "get_records", return_value=iter(records)):
+            transformer = MagicMock()
+            transformer.transform.side_effect = lambda r, *a, **kw: r
+            stream.sync(state={}, transformer=transformer, parent_id={"id": "SV_1"})
 
         mock_wr.assert_called_once()
 
@@ -153,12 +153,12 @@ class TestSurveyResponseExportSync(unittest.TestCase):
         stream = self._stream()
         records = [{"responseId": "R_1", "recorded_date": "2020-01-01"}]
 
-        with patch("tap_qualtrics.streams.survey_response_export.get_bookmark", return_value="2021-06-01"):
-            with patch("singer.write_bookmark"):
-                with patch.object(stream, "get_records", return_value=iter(records)):
-                    transformer = MagicMock()
-                    transformer.transform.side_effect = lambda r, *a, **kw: r
-                    stream.sync(state={}, transformer=transformer, parent_id={"id": "SV_1"})
+        with patch("tap_qualtrics.streams.survey_response_export.get_bookmark", return_value="2021-06-01"), \
+                patch("singer.write_bookmark"), \
+                patch.object(stream, "get_records", return_value=iter(records)):
+            transformer = MagicMock()
+            transformer.transform.side_effect = lambda r, *a, **kw: r
+            stream.sync(state={}, transformer=transformer, parent_id={"id": "SV_1"})
 
         mock_wr.assert_not_called()
 
@@ -297,7 +297,7 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
 
         entries, _ = SurveyResponseExport.discover_dynamic_entries(client)
         self.assertEqual(len(entries), 1)
-        stream_name, schema, key_props = entries[0]
+        stream_name, _schema, _key_props = entries[0]
         self.assertEqual(stream_name, "survey_response_export__SV_1")
 
     def test_no_export_id_in_discover_skips(self):
@@ -331,7 +331,7 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
         client = _make_client()
         client.get.return_value = {"result": {"elements": [{"id": "SV_1"}]}}
         client.post.side_effect = Exception("unexpected")
-        with self.assertRaises(Exception):
+        with self.assertRaises(Exception):  # noqa: B017 - asserting generic Exception propagates unmodified
             SurveyResponseExport.discover_dynamic_entries(client)
 
     def test_survey_with_no_id_skipped(self):
@@ -422,13 +422,13 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
             page_index = 0 if not full_url else int(full_url.rsplit("=", 1)[1])
             next_index = page_index + 1
             next_url = (
-                "https://qualtrics.example.com/surveys?page={}".format(next_index)
+                f"https://qualtrics.example.com/surveys?page={next_index}"
                 if next_index < total_surveys
                 else None
             )
             return {
                 "result": {
-                    "elements": [{"id": "SV_{}".format(page_index)}],
+                    "elements": [{"id": f"SV_{page_index}"}],
                     "nextPage": next_url,
                 }
             }
@@ -505,9 +505,8 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
 
         client.get.side_effect = get_side_effect
 
-        with patch.object(sre_module, "DISCOVERY_MAX_SURVEY_PAGES", 5):
-            with self.assertRaises(QualtricsPaginationError):
-                SurveyResponseExport.discover_dynamic_entries(client)
+        with patch.object(sre_module, "DISCOVERY_MAX_SURVEY_PAGES", 5), self.assertRaises(QualtricsPaginationError):
+            SurveyResponseExport.discover_dynamic_entries(client)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from tap_tester import connections, runner
 from base import QualtricsBaseTest
+from tap_tester import connections, runner
 
 
 class QualtricsStartDateTest(QualtricsBaseTest):
@@ -20,12 +20,12 @@ class QualtricsStartDateTest(QualtricsBaseTest):
 
     @property
     def start_date_1(self):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return (now - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     @property
     def start_date_2(self):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return (now - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def _run_sync_with_start_date(self, start_date):
@@ -172,7 +172,5 @@ class QualtricsStartDateTest(QualtricsBaseTest):
         if not validated_streams:
             self.skipTest(
                 "No incremental streams produced records in the narrow start-date window. "
-                "Seed recent data for streams {} or widen the window in this test.".format(
-                    sorted(skipped_no_data)
-                )
+                f"Seed recent data for streams {sorted(skipped_no_data)} or widen the window in this test."
             )

@@ -106,9 +106,8 @@ class TestDiscoverAndSyncBranchBehaviors(unittest.TestCase):
         catalog.get_selected_streams.return_value = [selected]
         catalog.get_stream.return_value = MagicMock()
 
-        with patch("tap_qualtrics.sync.STREAMS", {"users": failing_cls}):
-            with self.assertRaises(RuntimeError):
-                sync(MagicMock(), {}, catalog, {})
+        with patch("tap_qualtrics.sync.STREAMS", {"users": failing_cls}), self.assertRaises(RuntimeError):
+            sync(MagicMock(), {}, catalog, {})
 
         self.assertTrue(mock_write_state.called)
 

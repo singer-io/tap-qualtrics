@@ -9,7 +9,10 @@ from jsonschema import Draft4Validator, FormatChecker
 from singer import metadata
 
 from tap_qualtrics.discover import _apply_access_checks, discover
-from tap_qualtrics.exceptions import QualtricsForbiddenError, QualtricsInternalServerError
+from tap_qualtrics.exceptions import (
+    QualtricsForbiddenError,
+    QualtricsInternalServerError,
+)
 from tap_qualtrics.schema import get_schemas
 from tap_qualtrics.streams import STREAMS
 from tap_qualtrics.streams.survey_languages import SurveyLanguages
@@ -18,7 +21,6 @@ from tap_qualtrics.streams.survey_questions import SurveyQuestions
 from tap_qualtrics.streams.survey_translations import SurveyTranslations
 from tap_qualtrics.streams.survey_versions import SurveyVersions
 from tap_qualtrics.sync import sync
-
 
 NEW_STREAMS = (
     SurveyVersions, SurveyOptions, SurveyLanguages, SurveyTranslations,

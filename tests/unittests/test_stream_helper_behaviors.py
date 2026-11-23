@@ -1,8 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from singer import metadata
-
 from tap_qualtrics.exceptions import QualtricsInternalServerError
 from tap_qualtrics.streams.audit_events import AuditEvents
 from tap_qualtrics.streams.distribution_history import DistributionHistory
@@ -60,9 +58,8 @@ class TestStreamHelperBehaviors(unittest.TestCase):
         self.assertEqual(stream._make_probe_path({}), "")
 
         stream.url_endpoint = "distributions/D_2/links"
-        with patch.object(stream, "_paginate", side_effect=QualtricsInternalServerError("500")):
-            with self.assertRaises(QualtricsInternalServerError):
-                list(stream.get_records())
+        with patch.object(stream, "_paginate", side_effect=QualtricsInternalServerError("500")), self.assertRaises(QualtricsInternalServerError):
+            list(stream.get_records())
 
         self.assertTrue(mock_logger.warning.called)
 

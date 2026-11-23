@@ -1,4 +1,5 @@
 import os
+from typing import ClassVar
 
 from tap_tester import menagerie, runner
 from tap_tester.base_suite_tests.base_case import BaseCase
@@ -388,7 +389,7 @@ class QualtricsBaseTest(BaseCase):
 
 
     # Fast PR gate: small, stable coverage across FULL_TABLE and INCREMENTAL.
-    _STREAMS_FOR_TESTING_PR = {
+    _STREAMS_FOR_TESTING_PR: ClassVar = {
         'users',
         'groups',
         'tickets',
@@ -397,7 +398,7 @@ class QualtricsBaseTest(BaseCase):
     }
 
     # Nightly tier: broader coverage for higher confidence and cross-domain behavior.
-    _STREAMS_FOR_TESTING_NIGHTLY = {
+    _STREAMS_FOR_TESTING_NIGHTLY: ClassVar = {
         'users',
         'groups',
         'tickets',
@@ -415,12 +416,12 @@ class QualtricsBaseTest(BaseCase):
         'erasure_requests',
     }
 
-    _TEST_STREAM_TIERS = {
+    _TEST_STREAM_TIERS: ClassVar = {
         'pr': _STREAMS_FOR_TESTING_PR,
         'nightly': _STREAMS_FOR_TESTING_NIGHTLY,
     }
 
-    _TEST_STREAM_GROUPS = {
+    _TEST_STREAM_GROUPS: ClassVar = {
         'pr-core': {
             'users',
             'groups',
@@ -474,16 +475,12 @@ class QualtricsBaseTest(BaseCase):
         missing_reasons = {stream for stream, reason in exclusions.items() if not reason}
         if missing_reasons:
             raise AssertionError(
-                "Every excluded stream must include a non-empty reason: {}".format(
-                    sorted(missing_reasons)
-                )
+                f"Every excluded stream must include a non-empty reason: {sorted(missing_reasons)}"
             )
         unknown_streams = set(exclusions).difference(streams)
         if unknown_streams:
             raise AssertionError(
-                "Exclusions reference streams outside the selected set: {}".format(
-                    sorted(unknown_streams)
-                )
+                f"Exclusions reference streams outside the selected set: {sorted(unknown_streams)}"
             )
         return set(streams).difference(exclusions)
 
@@ -492,9 +489,7 @@ class QualtricsBaseTest(BaseCase):
         tier = cls.stream_test_tier()
         if tier not in cls._TEST_STREAM_TIERS:
             raise ValueError(
-                "Unsupported TAP_QUALTRICS_TEST_STREAM_TIER '{}'. Expected one of: {}".format(
-                    tier, sorted(cls._TEST_STREAM_TIERS)
-                )
+                f"Unsupported TAP_QUALTRICS_TEST_STREAM_TIER '{tier}'. Expected one of: {sorted(cls._TEST_STREAM_TIERS)}"
             )
 
         selected = set(cls._TEST_STREAM_TIERS[tier])
@@ -509,16 +504,12 @@ class QualtricsBaseTest(BaseCase):
         if group:
             if group not in cls._TEST_STREAM_GROUPS:
                 raise ValueError(
-                    "Unsupported TAP_QUALTRICS_TEST_STREAM_GROUP '{}'. Expected one of: {}".format(
-                        group, sorted(cls._TEST_STREAM_GROUPS)
-                    )
+                    f"Unsupported TAP_QUALTRICS_TEST_STREAM_GROUP '{group}'. Expected one of: {sorted(cls._TEST_STREAM_GROUPS)}"
                 )
             selected = selected.intersection(cls._TEST_STREAM_GROUPS[group])
             if not selected:
                 raise ValueError(
-                    "No streams selected after applying TAP_QUALTRICS_TEST_STREAM_GROUP='{}' for tier '{}'".format(
-                        group, tier
-                    )
+                    f"No streams selected after applying TAP_QUALTRICS_TEST_STREAM_GROUP='{group}' for tier '{tier}'"
                 )
 
         return selected
@@ -538,8 +529,8 @@ class QualtricsBaseTest(BaseCase):
             'redirect_uri': 'TAP_QUALTRICS_REDIRECT_URI',
         }
 
-        for cred in creds:
-            credentials_dict[cred] = os.getenv(creds[cred])
+        for cred, env_var in creds.items():
+            credentials_dict[cred] = os.getenv(env_var)
 
         overrides = getattr(QualtricsBaseTest, "_credential_overrides", None) or {}
         for key, value in overrides.items():
@@ -586,10 +577,10 @@ class QualtricsBaseTest(BaseCase):
         menagerie.verify_check_exit_status(self, exit_status, check_job_name)
         all_catalogs = menagerie.get_catalogs(conn_id)
         self.assertGreater(len(all_catalogs), 0,
-                           msg="unable to locate schemas for connection {}".format(conn_id))
+                           msg=f"unable to locate schemas for connection {conn_id}")
         selected = self.expected_stream_names()
         found_catalogs = [c for c in all_catalogs if c['stream_name'] in selected]
         missing = selected - {c['stream_name'] for c in found_catalogs}
         self.assertEqual(set(), missing,
-                         msg="Streams missing from catalog: {}".format(missing))
+                         msg=f"Streams missing from catalog: {missing}")
         return found_catalogs
