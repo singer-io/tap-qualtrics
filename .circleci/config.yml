@@ -242,6 +242,8 @@ workflows:
           context: circleci-user
           stream_group: "pr-stateful"
           stream_tier: "pr"
+          requires:
+            - integration-pr-core
 
   build_daily:
     triggers:
@@ -273,9 +275,13 @@ workflows:
           stream_group: "nightly-catalog"
           stream_tier: "nightly"
           notify_on_fail: true
+          requires:
+            - nightly-integration-core
       - integration_tests:
           name: nightly-integration-incremental
           context: circleci-user
           stream_group: "nightly-incremental"
           stream_tier: "nightly"
           notify_on_fail: true
+          requires:
+            - nightly-integration-catalog
