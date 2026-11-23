@@ -74,7 +74,7 @@ jobs:
           command: |
             source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
             mkdir -p test_output
-            coverage run --branch -m pytest tests/unittests --junitxml=test_output/report.xml
+            coverage run --branch --source=tap_qualtrics -m pytest tests/unittests --junitxml=test_output/report.xml
       - run:
           name: "Coverage Report"
           command: |
