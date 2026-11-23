@@ -70,8 +70,9 @@ class RefreshingExportClient:
             return {"result": {"status": "complete", "fileId": "exp-1"}}
         return {"result": {"status": "complete", "fileId": "file-1"}}
 
-    def get_file(self, _path):
+    def get_file(self, _path, stream=False):  # pylint: disable=unused-argument
         resp = MagicMock()
+        resp.headers = {}
         if self.stream_type == "audit_export":
             resp.content = b'{"id":"a1","timestamp":"2026-11-01T00:00:00Z"}\n'
         else:
