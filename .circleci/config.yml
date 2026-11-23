@@ -67,7 +67,7 @@ jobs:
           name: "pip-audit"
           command: |
             source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
-            pip-audit
+            pip-audit --skip-editable
       - add_ssh_keys
       - run:
           name: "Unit Tests"
