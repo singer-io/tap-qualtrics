@@ -138,7 +138,7 @@ jobs:
                     echo "SLACK_WEBHOOK_URL is not set; skipping nightly alert."
                     exit 0
                   fi
-                  payload=$(cat <<'JSON'
+                  payload=$(cat \<<'JSON'
                   {
                     "text": ":rotating_light: tap-qualtrics nightly quality/unit job failed on master. Check CircleCI workflow for details."
                   }
@@ -182,7 +182,7 @@ jobs:
                     echo "SLACK_WEBHOOK_URL is not set; skipping nightly alert."
                     exit 0
                   fi
-                  payload=$(cat <<'JSON'
+                  payload=$(cat \<<'JSON'
                   {
                     "text": ":rotating_light: tap-qualtrics nightly integration shard failed on master. Check CircleCI workflow for details."
                   }
