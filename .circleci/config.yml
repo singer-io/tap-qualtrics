@@ -12,6 +12,15 @@ jobs:
       notify_on_fail:
         type: boolean
         default: false
+      run_non_functional_tests:
+        type: boolean
+        default: false
+      enforce_contract_fixture_coverage:
+        type: boolean
+        default: false
+      run_live_schema_contract:
+        type: boolean
+        default: false
     docker:
       - image: 218546966473.dkr.ecr.us-east-1.amazonaws.com/circle-ci:stitch-tap-tester-uv
     steps:
@@ -87,29 +96,32 @@ jobs:
           name: "Non-functional Export Tests (optional)"
           command: |
             source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
-            if [ "${RUN_NON_FUNCTIONAL_TESTS:-0}" = "1" ]; then
+            if [ "<< parameters.run_non_functional_tests >>" = "true" ]; then
               python -m pytest tests/unittests/test_nonfunctional_exports.py -q
             else
-              echo "Skipping non-functional export tests (set RUN_NON_FUNCTIONAL_TESTS=1 to enable)."
+              echo "Skipping non-functional export tests (set run_non_functional_tests: true to enable)."
             fi
       - run:
           name: "Contract Replay Tests (offline fixtures)"
           command: |
             source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
-            ENFORCE_CONTRACT_FIXTURE_COVERAGE=${ENFORCE_CONTRACT_FIXTURE_COVERAGE:-0} \
-              python -m pytest tests/contracts/test_stream_contract_replay.py -q
+            if [ "<< parameters.enforce_contract_fixture_coverage >>" = "true" ]; then
+              ENFORCE_CONTRACT_FIXTURE_COVERAGE=1 python -m pytest tests/contracts/test_stream_contract_replay.py -q
+            else
+              ENFORCE_CONTRACT_FIXTURE_COVERAGE=0 python -m pytest tests/contracts/test_stream_contract_replay.py -q
+            fi
       - run:
           name: "Live Schema Contract Check (nightly optional)"
           command: |
             source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
-            if [ "${RUN_LIVE_SCHEMA_CONTRACT:-0}" = "1" ]; then
+            if [ "<< parameters.run_live_schema_contract >>" = "true" ]; then
               if [ -z "${QUALTRICS_CONTRACT_CONFIG:-}" ]; then
-                echo "QUALTRICS_CONTRACT_CONFIG must be set when RUN_LIVE_SCHEMA_CONTRACT=1"
+                echo "QUALTRICS_CONTRACT_CONFIG must be set when run_live_schema_contract: true"
                 exit 1
               fi
               python -m pytest tests/contracts/test_live_schema_contract.py -q -m live_contract
             else
-              echo "Skipping live schema contract check (set RUN_LIVE_SCHEMA_CONTRACT=1 to enable)."
+              echo "Skipping live schema contract check (set run_live_schema_contract: true to enable)."
             fi
       - run:
           name: "Publish per-stream test matrix"
@@ -241,10 +253,9 @@ workflows:
           python_version: "3.12"
           dependency_profile: "pinned"
           notify_on_fail: true
-          environment:
-            RUN_LIVE_SCHEMA_CONTRACT: "1"
-            ENFORCE_CONTRACT_FIXTURE_COVERAGE: "1"
-            RUN_NON_FUNCTIONAL_TESTS: "1"
+          run_live_schema_contract: true
+          enforce_contract_fixture_coverage: true
+          run_non_functional_tests: true
       - integration_tests:
           name: nightly-integration-core
           context: circleci-user
