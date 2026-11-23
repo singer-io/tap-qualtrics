@@ -1,17 +1,20 @@
-﻿from singer import get_bookmark, metrics, write_bookmark, write_record
+﻿from typing import ClassVar
+
+from singer import get_bookmark, metrics, write_bookmark, write_record
+
 from tap_qualtrics.streams.abstracts import IncrementalStream
 
 
 class Distributions(IncrementalStream):
     tap_stream_id = "distributions"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     replication_method = "INCREMENTAL"
-    replication_keys = ["modifiedDate"]
+    replication_keys: ClassVar = ["modifiedDate"]
     data_key = "result.elements"
     path = "distributions"
     page_size = 100
     parent = "surveys"
-    children = ["distribution_history", "distribution_links"]
+    children: ClassVar = ["distribution_history", "distribution_links"]
 
     def get_records(self, parent_id=None, bookmark=""):
         survey_id = (parent_id or {}).get("id") or parent_id

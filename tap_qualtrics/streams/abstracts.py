@@ -1,6 +1,7 @@
 ﻿from abc import ABC, abstractmethod
-from datetime import datetime, timezone
-from typing import Any, Dict, Iterator, List, Optional
+from collections.abc import Iterator
+from datetime import UTC, datetime
+from typing import Any, ClassVar
 
 from singer import (
     Transformer,
@@ -27,11 +28,11 @@ LOGGER = get_logger()
 def _bookmark_datetime(value: str) -> datetime:
     """Treat the empty child-stream bookmark as earlier than any timestamp."""
     if value in ("", None):
-        return datetime.min.replace(tzinfo=timezone.utc)
+        return datetime.min.replace(tzinfo=UTC)
     if isinstance(value, datetime):
         if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc)
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
     if not isinstance(value, str):
         raise QualtricsError(
             f"Invalid bookmark datetime type: {type(value).__name__}. Expected string, datetime, or null."
@@ -44,7 +45,7 @@ def _bookmark_datetime(value: str) -> datetime:
         ) from err
 
 
-def _validate_bookmark_state(state: Dict, stream: str) -> None:
+def _validate_bookmark_state(state: dict, stream: str) -> None:
     if isinstance(state, dict):
         bookmarks = state.get("bookmarks", {})
         if isinstance(bookmarks, dict) and isinstance(bookmarks.get(stream, {}), dict):
@@ -68,9 +69,9 @@ class BaseStream(ABC):
     """Abstract base class for all Singer streams."""
 
     tap_stream_id: str = ""
-    key_properties: List[str] = []
+    key_properties: ClassVar[list[str]] = []
     replication_method: str = "FULL_TABLE"
-    replication_keys: List[str] = []
+    replication_keys: ClassVar[list[str]] = []
     http_method: str = "GET"
     path: str = ""
     # dot-path into the response JSON where the list of records lives
@@ -78,9 +79,9 @@ class BaseStream(ABC):
     # dot-path into the response JSON for the next-page URL/token
     next_page_key: str = "result.nextPage"
     page_size: int = 100
-    children: List[str] = []
-    parent: Optional[str] = None
-    response_record_fields: Dict[str, type] = {}
+    children: ClassVar[list[str]] = []
+    parent: str | None = None
+    response_record_fields: ClassVar[dict[str, type]] = {}
 
     def __init__(self, client=None, catalog_entry=None) -> None:
         self.client = client
@@ -96,14 +97,14 @@ class BaseStream(ABC):
         if client:
             # stream's class-level page_size is an endpoint-specific cap; never exceed it
             self.page_size = min(client.page_size, type(self).page_size)
-        self.child_to_sync: List["BaseStream"] = []
+        self.child_to_sync: list[BaseStream] = []
 
     # ------------------------------------------------------------------ #
     # Abstract interface                                                   #
     # ------------------------------------------------------------------ #
 
     @abstractmethod
-    def sync(self, state: Dict, transformer: Transformer, parent_id: Any = None) -> int:
+    def sync(self, state: dict, transformer: Transformer, parent_id: Any = None) -> int:
         """Perform a full sync of this stream and return the record count."""
 
     # ------------------------------------------------------------------ #
@@ -116,11 +117,11 @@ class BaseStream(ABC):
     def write_schema(self) -> None:
         try:
             write_schema(self.tap_stream_id, self.schema, self.key_properties)
-        except OSError as err:
+        except OSError:
             LOGGER.error("OS Error writing schema for: %s", self.tap_stream_id)
-            raise err
+            raise
 
-    def check_access(self, parent_record: Optional[Dict] = None) -> bool:
+    def check_access(self, parent_record: dict | None = None) -> bool:
         """Return True if credentials can read this stream.
 
         Child streams require a parent_record to probe; without one they are
@@ -149,16 +150,16 @@ class BaseStream(ABC):
 
     def _make_probe_path(
         self,
-        _parent_record: Dict,
+        _parent_record: dict,
     ) -> str:
         """Build probe URL for a parent record (top-level: no substitution needed)."""
         return getattr(self, "path", "")
 
     def _enrich_sample(
         self,
-        sample: Dict,
-        _parent_record: Dict,
-    ) -> Dict:
+        sample: dict,
+        _parent_record: dict,
+    ) -> dict:
         """Inject parent context so grandchild probes have the IDs they need."""
         return sample
 
@@ -193,7 +194,7 @@ class BaseStream(ABC):
             raise QualtricsError(message)
         return records
 
-    def _paginate(self, path: str, params: Optional[Dict] = None) -> Iterator[Any]:
+    def _paginate(self, path: str, params: dict | None = None) -> Iterator[Any]:
         """Yield records from a paginated GET endpoint.
 
         Qualtrics returns a full URL in ``result.nextPage``; we follow it
@@ -201,7 +202,7 @@ class BaseStream(ABC):
         """
         params = dict(params or {})
         params.setdefault("pageSize", self.page_size)
-        next_url: Optional[str] = None
+        next_url: str | None = None
         visited_urls = set()
 
         while True:
@@ -231,11 +232,11 @@ class FullTableStream(BaseStream):
     def get_records(
         self,
         _parent_id: Any = None,
-    ) -> Iterator[Dict]:
+    ) -> Iterator[dict]:
         """Override in subclasses to customise how records are fetched."""
         yield from self._paginate(self.path)
 
-    def sync(self, state: Dict, transformer: Transformer, parent_id: Any = None) -> int:
+    def sync(self, state: dict, transformer: Transformer, parent_id: Any = None) -> int:
         with metrics.record_counter(self.tap_stream_id) as counter:
             for record in self.get_records(parent_id):
                 transformed = transformer.transform(record, self.schema, self.mdata)
@@ -268,7 +269,7 @@ class IncrementalStream(BaseStream):
         stream: str,
         key: Any = None,
         value: Any = None,
-    ) -> Dict:
+    ) -> dict:
         """A wrapper for singer.get_bookmark to deal with compatibility for
         bookmark values or start values."""
         if not (key or self.replication_keys):
@@ -291,15 +292,15 @@ class IncrementalStream(BaseStream):
         self,
         _parent_id: Any = None,
         bookmark: str = "",
-    ) -> Iterator[Dict]:
-        params: Dict = {}
+    ) -> Iterator[dict]:
+        params: dict = {}
         if bookmark:
             params["startDate"] = bookmark
         yield from self._paginate(self.path, params)
 
     def sync(
         self,
-        state: Dict,
+        state: dict,
         transformer: Transformer,
         parent_id: Any = None,
     ) -> int:
@@ -335,7 +336,7 @@ class IncrementalStream(BaseStream):
 class SurveyChildStream(FullTableStream):
     """Stream whose records are fetched once per survey."""
 
-    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
+    def get_records(self, parent_id: Any = None) -> Iterator[dict]:
         survey_id = (parent_id or {}).get("id") or parent_id
         if not survey_id:
             return
@@ -344,7 +345,7 @@ class SurveyChildStream(FullTableStream):
             record["survey_id"] = survey_id
             yield record
 
-    def _make_probe_path(self, parent_record: Dict) -> str:
+    def _make_probe_path(self, parent_record: dict) -> str:
         survey_id = (parent_record or {}).get("id", "")
         return self.path.format(survey_id=survey_id) if survey_id else ""
 
@@ -361,7 +362,7 @@ class IncrementalSurveyChildStream(IncrementalStream):
             self._starting_bookmark = super().get_bookmark(state, stream, key)
         return self._starting_bookmark
 
-    def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[Dict]:
+    def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[dict]:
         survey_id = (parent_id or {}).get("id") or parent_id
         if not survey_id:
             return
@@ -372,7 +373,7 @@ class IncrementalSurveyChildStream(IncrementalStream):
             record["lastModified"] = parent_bk
             yield record
 
-    def _make_probe_path(self, parent_record: Dict) -> str:
+    def _make_probe_path(self, parent_record: dict) -> str:
         survey_id = (parent_record or {}).get("id", "")
         return self.path.format(survey_id=survey_id) if survey_id else ""
 
@@ -380,7 +381,7 @@ class IncrementalSurveyChildStream(IncrementalStream):
 class DirectoryChildStream(FullTableStream):
     """Stream whose records are fetched once per directory."""
 
-    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
+    def get_records(self, parent_id: Any = None) -> Iterator[dict]:
         directory_id = (parent_id or {}).get("directoryId") or parent_id
         if not directory_id:
             return
@@ -389,23 +390,23 @@ class DirectoryChildStream(FullTableStream):
             record["directoryId"] = directory_id
             yield record
 
-    def _make_probe_path(self, parent_record: Dict) -> str:
+    def _make_probe_path(self, parent_record: dict) -> str:
         directory_id = (parent_record or {}).get("directoryId", "")
         return self.path.format(directory_id=directory_id) if directory_id else ""
 
-    def _enrich_sample(self, sample: Dict, parent_record: Dict) -> Dict:
+    def _enrich_sample(self, sample: dict, parent_record: dict) -> dict:
         return {**sample, "_directory_id": (parent_record or {}).get("directoryId", "")}
 
 
 class IncrementalDirectoryChildStream(IncrementalStream):
     """Incremental stream whose records are fetched once per directory."""
 
-    def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[Dict]:
+    def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[dict]:
         directory_id = (parent_id or {}).get("directoryId") or parent_id
         if not directory_id:
             return
         path = self.path.format(directory_id=directory_id)
-        params: Dict = {"pageSize": self.page_size}
+        params: dict = {"pageSize": self.page_size}
         if bookmark:
             params["startDate"] = bookmark
         for record in self._paginate(path, params):
@@ -413,18 +414,18 @@ class IncrementalDirectoryChildStream(IncrementalStream):
             record["_directory_id"] = directory_id
             yield record
 
-    def _make_probe_path(self, parent_record: Dict) -> str:
+    def _make_probe_path(self, parent_record: dict) -> str:
         directory_id = (parent_record or {}).get("directoryId", "")
         return self.path.format(directory_id=directory_id) if directory_id else ""
 
-    def _enrich_sample(self, sample: Dict, parent_record: Dict) -> Dict:
+    def _enrich_sample(self, sample: dict, parent_record: dict) -> dict:
         return {**sample, "_directory_id": (parent_record or {}).get("directoryId", "")}
 
 
 class MailingListChildStream(FullTableStream):
     """Stream whose records are fetched once per (directory, mailing-list) pair."""
 
-    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
+    def get_records(self, parent_id: Any = None) -> Iterator[dict]:
         if not parent_id:
             return
         directory_id = parent_id.get("_directory_id", "")
@@ -434,7 +435,7 @@ class MailingListChildStream(FullTableStream):
         path = self.path.format(directory_id=directory_id, mailing_list_id=mailing_list_id)
         yield from self._paginate(path)
 
-    def _make_probe_path(self, parent_record: Dict) -> str:
+    def _make_probe_path(self, parent_record: dict) -> str:
         directory_id = (parent_record or {}).get("_directory_id", "")
         mailing_list_id = (parent_record or {}).get("mailingListId", "")
         if directory_id and mailing_list_id:
@@ -448,7 +449,7 @@ class IncrementalMailingListChildStream(IncrementalStream):
     Uses parent's lastModifiedDate.
     """
 
-    def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[Dict]:
+    def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[dict]:
         if not parent_id:
             return
         directory_id = parent_id.get("_directory_id", "")
@@ -461,7 +462,7 @@ class IncrementalMailingListChildStream(IncrementalStream):
             record["lastModifiedDate"] = parent_bk
             yield record
 
-    def _make_probe_path(self, parent_record: Dict) -> str:
+    def _make_probe_path(self, parent_record: dict) -> str:
         directory_id = (parent_record or {}).get("_directory_id", "")
         mailing_list_id = (parent_record or {}).get("mailingListId", "")
         if directory_id and mailing_list_id:
@@ -472,7 +473,7 @@ class IncrementalMailingListChildStream(IncrementalStream):
 class GroupChildStream(FullTableStream):
     """Stream whose records are fetched once per group."""
 
-    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
+    def get_records(self, parent_id: Any = None) -> Iterator[dict]:
         group_id = (parent_id or {}).get("id") or parent_id
         if not group_id:
             return
@@ -481,7 +482,7 @@ class GroupChildStream(FullTableStream):
             record["groupId"] = group_id
             yield record
 
-    def _make_probe_path(self, parent_record: Dict) -> str:
+    def _make_probe_path(self, parent_record: dict) -> str:
         group_id = (parent_record or {}).get("id", "")
         return self.path.format(group_id=group_id) if group_id else ""
 
@@ -489,7 +490,7 @@ class GroupChildStream(FullTableStream):
 class LibraryChildStream(FullTableStream):
     """Stream whose records are fetched once per library."""
 
-    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
+    def get_records(self, parent_id: Any = None) -> Iterator[dict]:
         library_id = (parent_id or {}).get("libraryId") or parent_id
         if not library_id:
             return
@@ -498,7 +499,7 @@ class LibraryChildStream(FullTableStream):
             record["libraryId"] = library_id
             yield record
 
-    def _make_probe_path(self, parent_record: Dict) -> str:
+    def _make_probe_path(self, parent_record: dict) -> str:
         library_id = (parent_record or {}).get("libraryId", "")
         return self.path.format(library_id=library_id) if library_id else ""
 
@@ -506,7 +507,7 @@ class LibraryChildStream(FullTableStream):
 class SampleChildStream(FullTableStream):
     """Stream whose records are fetched once per (directory, sample) pair."""
 
-    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
+    def get_records(self, parent_id: Any = None) -> Iterator[dict]:
         if not parent_id:
             return
         directory_id = parent_id.get("_directory_id", "")
@@ -518,7 +519,7 @@ class SampleChildStream(FullTableStream):
             record["sampleId"] = sample_id
             yield record
 
-    def _make_probe_path(self, parent_record: Dict) -> str:
+    def _make_probe_path(self, parent_record: dict) -> str:
         directory_id = (parent_record or {}).get("_directory_id", "")
         sample_id = (parent_record or {}).get("sampleId", (parent_record or {}).get("id", ""))
         if directory_id and sample_id:
@@ -529,7 +530,7 @@ class SampleChildStream(FullTableStream):
 class SegmentChildStream(FullTableStream):
     """Stream whose records are fetched once per (directory, segment) pair."""
 
-    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
+    def get_records(self, parent_id: Any = None) -> Iterator[dict]:
         if not parent_id:
             return
         directory_id = parent_id.get("_directory_id", "")
@@ -541,7 +542,7 @@ class SegmentChildStream(FullTableStream):
             record["segmentId"] = segment_id
             yield record
 
-    def _make_probe_path(self, parent_record: Dict) -> str:
+    def _make_probe_path(self, parent_record: dict) -> str:
         directory_id = (parent_record or {}).get("_directory_id", "")
         segment_id = (parent_record or {}).get("segmentId", "")
         if directory_id and segment_id:
@@ -555,7 +556,7 @@ class IncrementalSegmentChildStream(IncrementalStream):
     Uses parent's lastModifiedDate.
     """
 
-    def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[Dict]:
+    def get_records(self, parent_id: Any = None, bookmark: str = "") -> Iterator[dict]:
         if not parent_id:
             return
         directory_id = parent_id.get("_directory_id", "")
@@ -569,7 +570,7 @@ class IncrementalSegmentChildStream(IncrementalStream):
             record["lastModifiedDate"] = parent_bk
             yield record
 
-    def _make_probe_path(self, parent_record: Dict) -> str:
+    def _make_probe_path(self, parent_record: dict) -> str:
         directory_id = (parent_record or {}).get("_directory_id", "")
         segment_id = (parent_record or {}).get("segmentId", "")
         if directory_id and segment_id:
@@ -580,7 +581,7 @@ class IncrementalSegmentChildStream(IncrementalStream):
 class ContactChildStream(FullTableStream):
     """Stream whose records are fetched once per (directory, contact) pair."""
 
-    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
+    def get_records(self, parent_id: Any = None) -> Iterator[dict]:
         if not parent_id:
             return
         directory_id = parent_id.get("_directory_id", "")
@@ -590,7 +591,7 @@ class ContactChildStream(FullTableStream):
         path = self.path.format(directory_id=directory_id, contact_id=contact_id)
         yield from self._paginate(path)
 
-    def _make_probe_path(self, parent_record: Dict) -> str:
+    def _make_probe_path(self, parent_record: dict) -> str:
         directory_id = (parent_record or {}).get("_directory_id", "")
         contact_id = (parent_record or {}).get("contactId", "")
         if directory_id and contact_id:
@@ -601,7 +602,7 @@ class ContactChildStream(FullTableStream):
 class TicketChildStream(FullTableStream):
     """Stream whose records are fetched once per ticket."""
 
-    def get_records(self, parent_id: Any = None) -> Iterator[Dict]:
+    def get_records(self, parent_id: Any = None) -> Iterator[dict]:
         ticket_id = (
             (parent_id or {}).get("key")
             or (parent_id or {}).get("ticketId")
@@ -613,7 +614,7 @@ class TicketChildStream(FullTableStream):
         path = self.path.format(ticket_id=ticket_id)
         yield from self._paginate(path)
 
-    def _make_probe_path(self, parent_record: Dict) -> str:
+    def _make_probe_path(self, parent_record: dict) -> str:
         ticket_id = (
             (parent_record or {}).get("key")
             or (parent_record or {}).get("ticketId")
@@ -631,7 +632,7 @@ class ChildBaseStream(IncrementalStream):
         """Override in subclasses to build the child's URL from the parent record."""
         return ""
 
-    def modify_object(self, record: Dict, _parent_record: Dict = None) -> Dict:
+    def modify_object(self, record: dict, _parent_record: dict | None = None) -> dict:
         """Override to inject parent context (IDs, replication key) into each record."""
         return record
 
@@ -655,14 +656,14 @@ class ChildBaseStream(IncrementalStream):
             raise
 
     # pylint: disable=access-member-before-definition
-    def get_bookmark(self, state: Dict, stream: str, key: Any = None) -> str:
+    def get_bookmark(self, state: dict, stream: str, key: Any = None) -> str:
         """Singleton bookmark; defaults to '' so all records pass on first run without state."""
         if self.bookmark_value is None:
             bk = get_bookmark(state, stream, key or self.replication_keys[0], None)
             self.bookmark_value = bk if bk is not None else ""
         return self.bookmark_value
 
-    def sync(self, state: Dict, transformer: Transformer, parent_id: Any = None) -> int:
+    def sync(self, state: dict, transformer: Transformer, parent_id: Any = None) -> int:
         """Tap-gitlab-style: set URL from parent → fetch → modify → filter → write."""
         bookmark = self.get_bookmark(state, self.tap_stream_id)
         max_bk = bookmark

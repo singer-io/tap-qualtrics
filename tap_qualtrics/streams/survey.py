@@ -1,11 +1,13 @@
-﻿from tap_qualtrics.streams.abstracts import ChildBaseStream
+from typing import ClassVar
+
+from tap_qualtrics.streams.abstracts import ChildBaseStream
 
 
 class Survey(ChildBaseStream):
     tap_stream_id = "survey"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     replication_method = "INCREMENTAL"
-    replication_keys = ["lastModifiedDate"]
+    replication_keys: ClassVar = ["lastModifiedDate"]
     data_key = "result"
     path = "surveys/{survey_id}"
     parent = "surveys"

@@ -1,16 +1,18 @@
-﻿from tap_qualtrics.streams.abstracts import ChildBaseStream
+from typing import ClassVar
+
+from tap_qualtrics.streams.abstracts import ChildBaseStream
 
 
 class Segments(ChildBaseStream):
     tap_stream_id = "segments"
-    key_properties = ["segmentId"]
+    key_properties: ClassVar = ["segmentId"]
     replication_method = "INCREMENTAL"
-    replication_keys = ["lastModifiedDate"]
+    replication_keys: ClassVar = ["lastModifiedDate"]
     data_key = "result.elements"
     path = "directories/{directory_id}/segments"
     page_size = 10
     parent = "directories"
-    children = ["segment_contacts"]
+    children: ClassVar = ["segment_contacts"]
 
     def get_url_endpoint(self, parent_obj=None):
         directory_id = (parent_obj or {}).get("directoryId", "")

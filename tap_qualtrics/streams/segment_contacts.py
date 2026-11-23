@@ -1,11 +1,13 @@
-﻿from tap_qualtrics.streams.abstracts import ChildBaseStream
+from typing import ClassVar
+
+from tap_qualtrics.streams.abstracts import ChildBaseStream
 
 
 class SegmentContacts(ChildBaseStream):
     tap_stream_id = "segment_contacts"
-    key_properties = ["contactId"]
+    key_properties: ClassVar = ["contactId"]
     replication_method = "INCREMENTAL"
-    replication_keys = ["lastModifiedDate"]
+    replication_keys: ClassVar = ["lastModifiedDate"]
     data_key = "result.elements"
     path = "directories/{directory_id}/segments/{segment_id}/contacts"
     page_size = 50

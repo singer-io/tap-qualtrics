@@ -1,6 +1,7 @@
 import singer
 from singer import metadata
 from singer.catalog import Catalog, CatalogEntry, Schema
+
 from tap_qualtrics.exceptions import QualtricsForbiddenError
 from tap_qualtrics.schema import get_schemas
 from tap_qualtrics.streams import STREAMS
@@ -61,7 +62,7 @@ def _fetch_sample_record(client, path):
             or result.get("AvailableLanguages") or []
         )
         return elements[0] if elements else None
-    except Exception:  # pylint: disable=broad-exception-caught
+    except Exception:  # noqa: BLE001 - pylint: disable=broad-exception-caught
         return None
 
 
@@ -112,10 +113,10 @@ def _apply_access_checks(client, schemas: dict, field_metadata: dict) -> None:
 
     if not schemas:
         raise QualtricsForbiddenError(
-            (
+            
                 "HTTP-error-code: 403, Error: The credentials do not have "
                 "'read' access to any supported streams."
-            )
+            
         )
     if inaccessible:
         LOGGER.warning(
@@ -150,7 +151,7 @@ def discover(client=None) -> Catalog:
             LOGGER.error(err)
             LOGGER.error("stream_name: %s", stream_name)
             LOGGER.error("type schema_dict: %s", type(schema_dict))
-            raise err
+            raise
 
         key_properties = metadata.to_map(mdata).get((), {}).get("table-key-properties")
 

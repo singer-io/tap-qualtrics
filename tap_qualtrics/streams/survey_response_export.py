@@ -1,6 +1,7 @@
 import json
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, Iterator
+from typing import Any, ClassVar
 
 import backoff
 from singer import (
@@ -18,10 +19,10 @@ from tap_qualtrics.client import Client
 from tap_qualtrics.exceptions import (
     QualtricsBackoffError,
     QualtricsBadGatewayError,
-    QualtricsRateLimitError,
     QualtricsError,
     QualtricsForbiddenError,
     QualtricsPaginationError,
+    QualtricsRateLimitError,
 )
 from tap_qualtrics.streams.abstracts import IncrementalStream
 
@@ -32,7 +33,7 @@ DISCOVERY_EXPORT_LIMIT = 50
 DISCOVERY_MAX_SURVEY_PAGES = 100_000
 
 
-def _reported_total_from_export_status(status_response: Dict) -> int | None:
+def _reported_total_from_export_status(status_response: dict) -> int | None:
     """Best-effort extraction of API-reported record totals from export status payloads."""
     result = (status_response or {}).get("result") or {}
     for key in ("recordCount", "totalResponses", "totalCount", "count"):
@@ -43,9 +44,9 @@ def _reported_total_from_export_status(status_response: Dict) -> int | None:
 
 class SurveyResponseExport(IncrementalStream):
     tap_stream_id = "survey_response_export"
-    key_properties = ["responseId"]
+    key_properties: ClassVar = ["responseId"]
     replication_method = "INCREMENTAL"
-    replication_keys = ["recorded_date"]
+    replication_keys: ClassVar = ["recorded_date"]
     data_key = "responses"
     parent = "surveys"
     dynamic_schema = True
@@ -70,17 +71,15 @@ class SurveyResponseExport(IncrementalStream):
         while has_more_pages:
             if next_url is not None and next_url in seen_urls:
                 raise QualtricsPaginationError(
-                    "GET /surveys returned a repeated nextPage URL ({}) during discovery "
-                    "after {} page(s); refusing to loop forever or silently return a partial "
-                    "survey listing.".format(next_url, page_count)
+                    f"GET /surveys returned a repeated nextPage URL ({next_url}) during discovery "
+                    f"after {page_count} page(s); refusing to loop forever or silently return a partial "
+                    "survey listing."
                 )
             if page_count >= DISCOVERY_MAX_SURVEY_PAGES:
                 raise QualtricsPaginationError(
                     "GET /surveys did not finish paginating during discovery after the safety "
-                    "cap of {} pages; refusing to silently return a partial survey listing. "
-                    "This likely indicates the API is not terminating pagination as expected.".format(
-                        DISCOVERY_MAX_SURVEY_PAGES
-                    )
+                    f"cap of {DISCOVERY_MAX_SURVEY_PAGES} pages; refusing to silently return a partial survey listing. "
+                    "This likely indicates the API is not terminating pagination as expected."
                 )
             if next_url is not None:
                 seen_urls.add(next_url)
@@ -95,9 +94,7 @@ class SurveyResponseExport(IncrementalStream):
                     return [], []
                 raise QualtricsPaginationError(
                     "GET /surveys returned forbidden access while paginating during discovery "
-                    "after {} page(s); refusing to continue with a partial survey listing: {}".format(
-                        page_count, exc
-                    )
+                    f"after {page_count} page(s); refusing to continue with a partial survey listing: {exc}"
                 )
             page_count += 1
             result = surveys_resp.get("result") or {}
@@ -105,8 +102,8 @@ class SurveyResponseExport(IncrementalStream):
             next_url = result.get("nextPage")
             if next_url is not None and not isinstance(next_url, str):
                 raise QualtricsPaginationError(
-                    "GET /surveys returned invalid nextPage type during discovery on page {}: "
-                    "expected string or null, got {}.".format(page_count, type(next_url).__name__)
+                    f"GET /surveys returned invalid nextPage type during discovery on page {page_count}: "
+                    f"expected string or null, got {type(next_url).__name__}."
                 )
             has_more_pages = bool(next_url)
 
@@ -213,7 +210,7 @@ class SurveyResponseExport(IncrementalStream):
         self,
         parent_id: Any = None,
         bookmark: str = "",
-    ) -> Iterator[Dict]:
+    ) -> Iterator[dict]:
         survey_id = (parent_id or {}).get("id") or parent_id
         if not survey_id:
             return
@@ -277,7 +274,7 @@ class SurveyResponseExport(IncrementalStream):
                 api_total,
             )
 
-    def sync(self, state: Dict, transformer: Transformer, parent_id: Any = None) -> int:
+    def sync(self, state: dict, transformer: Transformer, parent_id: Any = None) -> int:
         survey_id = (parent_id or {}).get("id") or parent_id
         if not survey_id:
             return 0

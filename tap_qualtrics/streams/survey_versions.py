@@ -1,13 +1,15 @@
+from typing import ClassVar
+
 from tap_qualtrics.streams.abstracts import ChildBaseStream
 
 
 class SurveyVersions(ChildBaseStream):
     tap_stream_id = "survey_versions"
-    key_properties = ["surveyID", "versionID"]
+    key_properties: ClassVar = ["surveyID", "versionID"]
     path = "survey-definitions/{survey_id}/versions"
     parent = "surveys"
     replication_method = "INCREMENTAL"
-    replication_keys = ["lastModified"]
+    replication_keys: ClassVar = ["lastModified"]
 
     def get_url_endpoint(self, parent_obj=None):
         survey_id = (parent_obj or {}).get("id", "")

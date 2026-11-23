@@ -1,4 +1,7 @@
-﻿from singer import get_logger
+﻿from typing import ClassVar
+
+from singer import get_logger
+
 from tap_qualtrics.exceptions import QualtricsInternalServerError
 from tap_qualtrics.streams.abstracts import ChildBaseStream
 
@@ -7,9 +10,9 @@ LOGGER = get_logger()
 
 class DistributionLinks(ChildBaseStream):
     tap_stream_id = "distribution_links"
-    key_properties = ["contactId", "link"]
+    key_properties: ClassVar = ["contactId", "link"]
     replication_method = "INCREMENTAL"
-    replication_keys = ["modifiedDate"]
+    replication_keys: ClassVar = ["modifiedDate"]
     data_key = "result.elements"
     page_size = 100
     parent = "distributions"

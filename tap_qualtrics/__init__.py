@@ -1,6 +1,8 @@
-﻿import sys
-import json
+﻿import json
+import sys
+
 import singer
+
 from tap_qualtrics.client import Client
 from tap_qualtrics.discover import discover
 from tap_qualtrics.sync import sync

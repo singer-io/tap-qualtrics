@@ -1,11 +1,13 @@
-﻿from tap_qualtrics.streams.abstracts import IncrementalStream
+from typing import ClassVar
+
+from tap_qualtrics.streams.abstracts import IncrementalStream
 
 
 class WhatsappDistributions(IncrementalStream):
     tap_stream_id = "whatsapp_distributions"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     replication_method = "INCREMENTAL"
-    replication_keys = ["sendDate"]
+    replication_keys: ClassVar = ["sendDate"]
     data_key = "result.elements"
     path = "distributions/whatsapp"
     page_size = 100
