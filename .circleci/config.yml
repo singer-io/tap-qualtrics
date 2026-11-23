@@ -175,13 +175,18 @@ jobs:
       - run:
           name: "Integration Tests (group=<< parameters.stream_group >>, tier=<< parameters.stream_tier >>)"
           command: |
-            source /usr/local/share/virtualenvs/tap-tester/bin/activate
+            uv venv --python 3.12 /usr/local/share/virtualenvs/tap-qualtrics
+            source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
+            uv pip install -U setuptools
+            uv pip install .
             uv pip install --upgrade awscli
-            aws s3 cp s3://com-stitchdata-dev-deployment-assets/environments/tap-tester/tap_tester_sandbox dev_env.sh
-            source dev_env.sh
+            aws s3 cp s3://com-stitchdata-dev-deployment-assets/environments/tap-tester/tap_tester_sandbox /usr/local/share/virtualenvs/tap-qualtrics/dev_env.sh
+            deactivate
+            source /usr/local/share/virtualenvs/tap-qualtrics/dev_env.sh
             unset USE_STITCH_BACKEND
             export TAP_QUALTRICS_TEST_STREAM_TIER="<< parameters.stream_tier >>"
             export TAP_QUALTRICS_TEST_STREAM_GROUP="<< parameters.stream_group >>"
+            source /usr/local/share/virtualenvs/tap-tester/bin/activate
             run-test --tap=tap-qualtrics tests
       - when:
           condition: << parameters.notify_on_fail >>
