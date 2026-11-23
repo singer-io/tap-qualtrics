@@ -69,7 +69,7 @@ def _build_replay_client() -> Client:
 
 @pytest.mark.contract
 def test_contract_fixture_coverage_can_be_enforced():
-    if not os.environ.get("ENFORCE_CONTRACT_FIXTURE_COVERAGE"):
+    if os.environ.get("ENFORCE_CONTRACT_FIXTURE_COVERAGE", "0") not in ("1", "true", "yes"):
         pytest.skip("Set ENFORCE_CONTRACT_FIXTURE_COVERAGE=1 to enforce full registry fixture coverage.")
 
     missing = assert_stream_fixture_coverage(FIXTURES_DIR, STREAM_NAMES)
