@@ -184,6 +184,14 @@ This tap:
 - Primary keys: `responseId`
 - Replication strategy: INCREMENTAL
 - Replication key: `recordedDate`
+- `values`, `labels`, and `displayedValues` are flexible JSON objects. Selected
+  answer keys and native JSON types are preserved even when absent from the
+  discovery sample. Existing catalogs receive this schema when syncing; the
+  destination must support flexible nested JSON objects.
+- This change does not recover answers already omitted from earlier syncs.
+  Recovery requires replaying affected responses and ensuring their parent
+  surveys are visited; coordinate the backfill and any state changes with the
+  destination's deduplication and recovery procedure.
 
 **survey_versions** *(child of surveys)*
 - Endpoint: `GET /survey-definitions/{surveyId}/versions`
@@ -259,7 +267,8 @@ These streams are dynamic because each survey or event type can return a differe
 2. Creates an async export job with a `POST` request.
 3. Polls the job status until it completes.
 4. Downloads the generated export file.
-5. Parses a sample payload and infers the schema.
+5. Parses a sample payload and infers the schema. Survey response answer objects
+   additionally allow question keys and values not present in the sample.
 6. Builds a dynamic catalog entry such as `survey_response_export__<survey_id>` or `audit_export__<event_name>`.
 
 This is required for dynamic polling APIs where the schema is only known after data is fetched. Without creating a sample export and inspecting the returned records, the tap cannot infer the correct field structure for each survey or event type.

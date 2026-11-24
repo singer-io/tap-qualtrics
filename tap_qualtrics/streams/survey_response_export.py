@@ -1,5 +1,6 @@
 import json
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from typing import Any, Dict, Iterator
 
 import backoff
@@ -37,6 +38,34 @@ DISCOVERY_MAX_STALE_PAGES = 3
 # How often (in pages) to log pagination progress during discovery, so a long-running but
 # healthy large-account discovery remains observable instead of silent until it finishes.
 DISCOVERY_PROGRESS_LOG_INTERVAL = 100
+ANSWER_FIELDS = ("values", "labels", "displayedValues")
+
+
+def _answer_schema(schema: Dict, records=()) -> Dict:
+    """Preserve dynamic response answers and the displayed field list."""
+    schema = deepcopy(schema)
+    properties = schema["properties"]
+    for field in ANSWER_FIELDS:
+        existing = properties.get(field, {})
+        keys = set((existing.get("properties") or {}).keys())
+        for record in records:
+            answers = record.get(field)
+            if isinstance(answers, dict):
+                keys.update(answers)
+        properties[field] = {
+            "type": ["null", "object"],
+            "properties": {key: {} for key in sorted(keys)},
+            "patternProperties": {".*": {}},
+        }
+    displayed_fields = properties.get("displayedFields", {})
+    field_types = displayed_fields.get("type", [])
+    if "array" not in ([field_types] if isinstance(field_types, str) else field_types):
+        properties["displayedFields"] = {
+            "type": ["null", "array"],
+            "items": {"type": ["null", "string"]},
+        }
+    return schema
+
 
 class SurveyResponseExport(IncrementalStream):
     tap_stream_id = "survey_response_export"
@@ -194,7 +223,7 @@ class SurveyResponseExport(IncrementalStream):
                 record["survey_id"] = survey_id
                 record["recorded_date"] = (record.get("values") or {}).get("recordedDate", "")
 
-            schema = infer_schema(records)
+            schema = _answer_schema(infer_schema(records), records)
             return (
                 survey_id,
                 "entry",
@@ -284,7 +313,7 @@ class SurveyResponseExport(IncrementalStream):
             LOGGER.debug("Skipping %s: not selected.", dynamic_id)
             return 0
 
-        schema = catalog_entry.schema.to_dict()
+        schema = _answer_schema(catalog_entry.schema.to_dict())
         mdata = metadata.to_map(catalog_entry.metadata)
         write_schema(dynamic_id, schema, self.key_properties)
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.3
+  * Preserve survey response answer fields and their native JSON values, including fields absent from discovery samples.
+  * Preserve `displayedFields` when it is absent or null in the discovery sample.[#8](https://github.com/singer-io/tap-qualtrics/pull/8)
+
 ## 1.0.2
   * Add incremental `survey_definitions`, `survey_questions`, and `survey_flows` streams.
   * Preserve object-valued question `Randomization` fields without converting them to strings.
