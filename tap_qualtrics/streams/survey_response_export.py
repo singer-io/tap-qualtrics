@@ -42,7 +42,7 @@ ANSWER_FIELDS = ("values", "labels", "displayedValues")
 
 
 def _answer_schema(schema: Dict, records=()) -> Dict:
-    """Keep dynamic response answers untyped, including keys outside the sample."""
+    """Preserve dynamic response answers and the displayed field list."""
     schema = deepcopy(schema)
     properties = schema["properties"]
     for field in ANSWER_FIELDS:
@@ -56,6 +56,13 @@ def _answer_schema(schema: Dict, records=()) -> Dict:
             "type": ["null", "object"],
             "properties": {key: {} for key in sorted(keys)},
             "patternProperties": {".*": {}},
+        }
+    displayed_fields = properties.get("displayedFields", {})
+    field_types = displayed_fields.get("type", [])
+    if "array" not in ([field_types] if isinstance(field_types, str) else field_types):
+        properties["displayedFields"] = {
+            "type": ["null", "array"],
+            "items": {"type": ["null", "string"]},
         }
     return schema
 

@@ -2,12 +2,13 @@ import copy
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
 from jsonschema import Draft4Validator
 from singer import Transformer, metadata, utils
 from singer.catalog import CatalogEntry, Schema
 
 from tap_qualtrics.discover import discover
-from tap_qualtrics.streams.survey_response_export import SurveyResponseExport
+from tap_qualtrics.streams.survey_response_export import SurveyResponseExport, _answer_schema
 from tap_qualtrics.sync import sync
 
 
@@ -116,6 +117,92 @@ def test_discovery_includes_answer_maps_missing_from_sample():
     schema = _discovered_schema(_client(), [{"responseId": "R_1", "values": {"recordedDate": "2021-01-01T00:00:00Z"}}])
     for field in ANSWER_FIELDS:
         assert schema["properties"][field]["patternProperties"] == {".*": {}}
+
+
+@pytest.mark.parametrize("sample_value", [None, [], ["Q1"]])
+def test_displayed_fields_discovery_preserves_later_ids(sample_value):
+    sample = {"responseId": "R_1", "values": {"recordedDate": "2021-01-01T00:00:00Z"}}
+    if sample_value is not None:
+        sample["displayedFields"] = sample_value
+    schema = _discovered_schema(_client(), [sample])
+    assert "array" in schema["properties"]["displayedFields"]["type"]
+    record = {
+        "responseId": "R_2", "recorded_date": "2021-01-02T00:00:00Z",
+        "displayedFields": ["Q1", "Q2"],
+    }
+    output_schema, output, _ = _sync(schema, [record])
+    assert output[0]["displayedFields"] == ["Q1", "Q2"]
+    Draft4Validator(output_schema).validate(output[0])
+
+
+def test_null_displayed_fields_sample_preserves_later_array():
+    schema = _discovered_schema(_client(), [{
+        "responseId": "R_1",
+        "values": {"recordedDate": "2021-01-01T00:00:00Z"},
+        "displayedFields": None,
+    }])
+    record = {
+        "responseId": "R_2", "recorded_date": "2021-01-02T00:00:00Z",
+        "displayedFields": ["Q1", "Q2"],
+    }
+    output_schema, output, _ = _sync(schema, [record])
+    assert output[0]["displayedFields"] == record["displayedFields"]
+    Draft4Validator(output_schema).validate(output[0])
+
+
+@pytest.mark.parametrize("original_field", [None, {"type": ["null", "string"]}])
+def test_existing_catalog_gets_displayed_fields_array(original_field):
+    schema = {"type": "object", "properties": {
+        "responseId": {"type": "string"}, "recorded_date": {"type": "string"},
+    }}
+    if original_field is not None:
+        schema["properties"]["displayedFields"] = original_field
+    original_schema = copy.deepcopy(schema)
+    record = {
+        "responseId": "R_1", "recorded_date": "2021-01-01T00:00:00Z",
+        "displayedFields": ["Q1", "Q2"],
+    }
+    output_schema, output, _ = _sync(schema, [record])
+    assert output[0]["displayedFields"] == record["displayedFields"]
+    assert schema == original_schema
+    Draft4Validator(output_schema).validate(output[0])
+
+
+def test_displayed_fields_selection_is_respected():
+    schema = {"type": "object", "properties": {
+        "responseId": {"type": "string"}, "recorded_date": {"type": "string"},
+    }}
+    mdata = metadata.write(metadata.new(), (), "selected", True)
+    mdata = metadata.write(mdata, ("properties", "displayedFields"), "selected", False)
+    record = {
+        "responseId": "R_1", "recorded_date": "2021-01-01T00:00:00Z",
+        "displayedFields": ["Q1"],
+    }
+    _, output, _ = _sync(schema, [record], mdata)
+    assert "displayedFields" not in output[0]
+
+
+def test_existing_displayed_fields_array_schema_is_preserved():
+    original_field = {
+        "type": ["null", "array"],
+        "items": {"type": "string"},
+        "uniqueItems": True,
+    }
+    schema = {"type": "object", "properties": {"displayedFields": original_field}}
+    assert _answer_schema(schema)["properties"]["displayedFields"] == original_field
+
+
+def test_displayed_fields_accepts_null():
+    schema = {"type": "object", "properties": {
+        "responseId": {"type": "string"}, "recorded_date": {"type": "string"},
+    }}
+    record = {
+        "responseId": "R_1", "recorded_date": "2021-01-01T00:00:00Z",
+        "displayedFields": None,
+    }
+    output_schema, output, _ = _sync(schema, [record])
+    assert "displayedFields" in output[0] and output[0]["displayedFields"] is None
+    Draft4Validator(output_schema).validate(output[0])
 
 
 def test_unselected_answer_map_remains_unselected():
