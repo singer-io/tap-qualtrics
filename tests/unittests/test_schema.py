@@ -107,21 +107,23 @@ class TestLoadSchemaReferences(unittest.TestCase):
     def test_returns_dict(self):
         refs = load_schema_references()
         self.assertIsInstance(refs, dict)
-
-    def test_no_shared_dir_returns_empty(self):
-        with patch("tap_qualtrics.schema.os.path.exists", return_value=False):
-            refs = load_schema_references()
+        def test_dynamic_schema_streams_included(self):
+            schemas, field_metadata = get_schemas()
+            self.assertIn("audit_export", schemas)
+            self.assertIn("survey_response_export", schemas)
+            self.assertIn("audit_export", field_metadata)
+            self.assertIn("survey_response_export", field_metadata)
         self.assertEqual(refs, {})
 
     def test_shared_dir_with_files_loads_refs(self):
         import json as _json
         from unittest.mock import mock_open
         fake_content = _json.dumps({"type": "object"})
-        with patch("tap_qualtrics.schema.os.path.exists", return_value=True):
-            with patch("tap_qualtrics.schema.os.listdir", return_value=["shared.json"]):
-                with patch("tap_qualtrics.schema.os.path.isfile", return_value=True):
-                    with patch("builtins.open", mock_open(read_data=fake_content)):
-                        refs = load_schema_references()
+        with patch("tap_qualtrics.schema.os.path.exists", return_value=True), \
+             patch("tap_qualtrics.schema.os.listdir", return_value=["shared.json"]), \
+             patch("tap_qualtrics.schema.os.path.isfile", return_value=True), \
+             patch("builtins.open", mock_open(read_data=fake_content)):
+            refs = load_schema_references()
         self.assertIn("shared/shared.json", refs)
 
 
@@ -141,10 +143,12 @@ class TestGetSchemas(unittest.TestCase):
         for stream in ("users", "surveys", "groups", "distributions"):
             self.assertIn(stream, schemas)
 
-    def test_dynamic_schema_streams_excluded(self):
-        schemas, _ = get_schemas()
-        self.assertNotIn("audit_export", schemas)
-        self.assertNotIn("survey_response_export", schemas)
+    def test_dynamic_schema_streams_included(self):
+        schemas, field_metadata = get_schemas()
+        self.assertIn("audit_export", schemas)
+        self.assertIn("survey_response_export", schemas)
+        self.assertIn("audit_export", field_metadata)
+        self.assertIn("survey_response_export", field_metadata)
 
     def test_replication_keys_automatic(self):
         _, field_metadata = get_schemas()

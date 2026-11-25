@@ -17,7 +17,11 @@ setup(name="tap-qualtrics",
       ],
       extras_require={
           'dev': [
-              'parameterized'
+              'parameterized',
+              'mutmut',
+              'vcrpy',
+              'responses',
+              'jsonschema'
           ]
       },
       entry_points="""

@@ -1,14 +1,16 @@
+from typing import ClassVar
+
 from tap_qualtrics.streams.abstracts import ChildBaseStream
 
 
 class SurveyLanguages(ChildBaseStream):
     tap_stream_id = "survey_languages"
-    key_properties = ["survey_id", "language_code"]
+    key_properties: ClassVar = ["survey_id", "language_code"]
     path = "surveys/{survey_id}/languages"
     parent = "surveys"
-    children = ["survey_translations"]
+    children: ClassVar = ["survey_translations"]
     replication_method = "INCREMENTAL"
-    replication_keys = ["lastModified"]
+    replication_keys: ClassVar = ["lastModified"]
     data_key = "result.AvailableLanguages"
 
     def get_url_endpoint(self, parent_obj=None):

@@ -1,7 +1,7 @@
-﻿import os
-import json
+﻿import json
+import os
 import re
-from typing import Any, Dict, Tuple
+from typing import Any
 
 import singer
 from singer import metadata
@@ -11,7 +11,7 @@ LOGGER = singer.get_logger()
 _DATETIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
 
 
-def _infer_json_type(value: Any) -> Dict:
+def _infer_json_type(value: Any) -> dict:
     result = {"type": ["null", "string"]}
     if value is None:
         return result
@@ -32,9 +32,9 @@ def _infer_json_type(value: Any) -> Dict:
     return result
 
 
-def infer_schema(records: list) -> Dict:
+def infer_schema(records: list) -> dict:
     """Build a JSON Schema by inspecting the union of fields across all records."""
-    properties: Dict[str, Any] = {}
+    properties: dict[str, Any] = {}
     for record in records:
         for key, value in (record or {}).items():
             if key not in properties:
@@ -49,7 +49,7 @@ def get_abs_path(path: str) -> str:
     return os.path.join(os.path.dirname(os.path.realpath(__file__)), path)
 
 
-def load_schema_references() -> Dict:
+def load_schema_references() -> dict:
     """
     Load the schema files from the schema folder and return the schema references.
     """
@@ -74,7 +74,7 @@ def load_schema_references() -> Dict:
     return refs
 
 
-def get_schemas() -> Tuple[Dict, Dict]:
+def get_schemas() -> tuple[dict, dict]:
     """
     Load schema references and build stream schemas with Singer metadata.
     """
@@ -85,8 +85,6 @@ def get_schemas() -> Tuple[Dict, Dict]:
 
     refs = load_schema_references()
     for stream_name, stream_obj in STREAMS.items():
-        if getattr(stream_obj, "dynamic_schema", False):
-            continue  # catalog entries built at runtime via discover_dynamic_entries()
         schema_path = get_abs_path(f"schemas/{stream_name}.json")
         with open(schema_path, encoding="utf-8") as file:
             schema = json.load(file)
@@ -97,17 +95,17 @@ def get_schemas() -> Tuple[Dict, Dict]:
         mdata = metadata.new()
         mdata = metadata.get_standard_metadata(
             schema=schema,
-            key_properties=getattr(stream_obj, "key_properties"),
-            valid_replication_keys=(getattr(stream_obj, "replication_keys") or []),
-            replication_method=getattr(stream_obj, "replication_method"),
+            key_properties=stream_obj.key_properties,
+            valid_replication_keys=(stream_obj.replication_keys or []),
+            replication_method=stream_obj.replication_method,
         )
         mdata = metadata.to_map(mdata)
 
         if getattr(stream_obj, "parent", None):
             mdata = metadata.write(mdata, (), "parent-tap-stream-id", stream_obj.parent)
 
-        automatic_keys = getattr(stream_obj, "replication_keys") or []
-        for field_name in schema.get("properties", {}).keys():
+        automatic_keys = stream_obj.replication_keys or []
+        for field_name in schema.get("properties", {}):
             if field_name in automatic_keys:
                 mdata = metadata.write(
                     mdata, ("properties", field_name), "inclusion", "automatic"

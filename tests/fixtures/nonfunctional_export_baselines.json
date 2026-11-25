@@ -1,0 +1,12 @@
+{
+  "audit_export": {
+    "records": 5000,
+    "max_seconds": 5.0,
+    "max_peak_mb": 40.0
+  },
+  "survey_response_export": {
+    "records": 5000,
+    "max_seconds": 5.0,
+    "max_peak_mb": 40.0
+  }
+}

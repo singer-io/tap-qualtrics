@@ -9,15 +9,18 @@ from jsonschema import Draft4Validator, FormatChecker
 from singer import metadata
 
 from tap_qualtrics.discover import _apply_access_checks, discover
-from tap_qualtrics.exceptions import QualtricsForbiddenError, QualtricsInternalServerError
+from tap_qualtrics.exceptions import (
+    QualtricsForbiddenError,
+    QualtricsInternalServerError,
+)
 from tap_qualtrics.schema import get_schemas
 from tap_qualtrics.streams import STREAMS
 from tap_qualtrics.streams.survey_languages import SurveyLanguages
 from tap_qualtrics.streams.survey_options import SurveyOptions
+from tap_qualtrics.streams.survey_questions import SurveyQuestions
 from tap_qualtrics.streams.survey_translations import SurveyTranslations
 from tap_qualtrics.streams.survey_versions import SurveyVersions
 from tap_qualtrics.sync import sync
-
 
 NEW_STREAMS = (
     SurveyVersions, SurveyOptions, SurveyLanguages, SurveyTranslations,
@@ -331,6 +334,81 @@ def test_translation_selection_with_no_languages_makes_no_translation_requests()
         call("surveys", params={"pageSize": 100, "startDate": client.config["start_date"]}),
         call("surveys/SV_1/languages"),
     ]
+
+
+def test_parent_child_resume_across_questions_versions_and_options():
+    client = make_client()
+    surveys = [
+        {"id": "SV_1", "lastModified": "2026-01-01T00:00:00Z"},
+        {"id": "SV_2", "lastModified": "2026-02-01T00:00:00Z"},
+    ]
+    fail_once = {"enabled": True}
+
+    def get(path, **_kwargs):
+        if path == "surveys":
+            return {"result": {"elements": copy.deepcopy(surveys), "nextPage": None}}
+        if path.endswith("/questions"):
+            survey_id = path.split("/")[-2]
+            if survey_id == "SV_2" and fail_once["enabled"]:
+                raise RuntimeError("interrupted during questions")
+            return {"result": {"elements": [{"QuestionID": f"Q_{survey_id}"}]}}
+        if path.endswith("/versions"):
+            survey_id = path.split("/")[-2]
+            return {
+                "result": {
+                    "elements": [
+                        {"metadata": {**copy.deepcopy(VERSION), "surveyID": survey_id, "versionID": f"V_{survey_id}"}}
+                    ]
+                }
+            }
+        if path.endswith("/options"):
+            return {"result": copy.deepcopy(OPTIONS)}
+        pytest.fail(f"Unexpected request: {path}")
+
+    client.get.side_effect = get
+    selected = {SurveyQuestions.tap_stream_id, SurveyVersions.tap_stream_id, SurveyOptions.tap_stream_id}
+    catalog = selected_catalog(selected)
+    initial_bookmarks = {
+        "surveys": {"lastModified": "2020-01-01T00:00:00Z"},
+        SurveyQuestions.tap_stream_id: {"lastModified": "2020-01-01T00:00:00Z"},
+        SurveyVersions.tap_stream_id: {"lastModified": "2020-01-01T00:00:00Z"},
+        SurveyOptions.tap_stream_id: {"lastModified": "2020-01-01T00:00:00Z"},
+    }
+    state = {"bookmarks": copy.deepcopy(initial_bookmarks)}
+
+    with patch("singer.write_state"), \
+            patch("tap_qualtrics.streams.abstracts.write_schema"), \
+            patch("tap_qualtrics.streams.abstracts.write_record") as write_record:
+        with pytest.raises(RuntimeError, match="interrupted during questions"):
+            sync(client, client.config, catalog, state)
+
+        assert state["bookmarks"] == initial_bookmarks
+
+        fail_once["enabled"] = False
+        write_record.reset_mock()
+        sync(client, client.config, catalog, state)
+
+    emitted = {}
+    for args, _ in write_record.call_args_list:
+        stream_name, record = args
+        emitted.setdefault(stream_name, []).append(record)
+
+    assert len(emitted[SurveyQuestions.tap_stream_id]) == 2
+    assert len(emitted[SurveyVersions.tap_stream_id]) == 2
+    assert len(emitted[SurveyOptions.tap_stream_id]) == 2
+    assert {record["survey_id"] for record in emitted[SurveyQuestions.tap_stream_id]} == {"SV_1", "SV_2"}
+    assert {record["survey_id"] for record in emitted[SurveyOptions.tap_stream_id]} == {"SV_1", "SV_2"}
+    assert {record["surveyID"] for record in emitted[SurveyVersions.tap_stream_id]} == {"SV_1", "SV_2"}
+
+    for stream_name in (
+        "surveys",
+        SurveyQuestions.tap_stream_id,
+        SurveyVersions.tap_stream_id,
+        SurveyOptions.tap_stream_id,
+    ):
+        assert singer.utils.strptime_to_utc(state["bookmarks"][stream_name]["lastModified"]) == (
+            singer.utils.strptime_to_utc(surveys[-1]["lastModified"])
+        )
 
 
 @pytest.mark.parametrize("selected", [

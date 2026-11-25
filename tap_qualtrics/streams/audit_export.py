@@ -1,10 +1,11 @@
-﻿import io
+﻿import hashlib
+import io
 import json
-import hashlib
 import zipfile
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
-from typing import Any, Dict, Iterator
+from datetime import UTC, datetime
+from typing import Any, ClassVar
 
 import backoff
 from singer import (
@@ -20,10 +21,10 @@ from singer import (
 
 from tap_qualtrics.client import Client
 from tap_qualtrics.exceptions import (
+    QualtricsBadGatewayError,
     QualtricsBadRequestError,
     QualtricsError,
     QualtricsForbiddenError,
-    QualtricsBadGatewayError,
     QualtricsInternalServerError,
     QualtricsRateLimitError,
     QualtricsServiceUnavailableError,
@@ -40,7 +41,7 @@ def _canonical_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
 
 
-def _ensure_record_id(record: Dict) -> Dict:
+def _ensure_record_id(record: dict) -> dict:
     """Guarantee a stable string id for Singer key_properties compatibility."""
     if record.get("id"):
         return record
@@ -49,11 +50,21 @@ def _ensure_record_id(record: Dict) -> Dict:
     return record
 
 
+def _reported_total_from_export_status(status_response: dict) -> int | None:
+    """Best-effort extraction of API-reported record totals from export status payloads."""
+    result = (status_response or {}).get("result") or {}
+    for key in ("recordCount", "totalCount", "totalRecords", "count"):
+        value = result.get(key)
+        if isinstance(value, int) and value >= 0:
+            return value
+    return None
+
+
 class AuditExport(IncrementalStream):
     tap_stream_id = "audit_export"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     replication_method = "INCREMENTAL"
-    replication_keys = ["timestamp"]
+    replication_keys: ClassVar = ["timestamp"]
     data_key = ""
     parent = "audit_export_event_types"
     dynamic_schema = True
@@ -84,7 +95,7 @@ class AuditExport(IncrementalStream):
             unique_event_names.append(event_name)
 
         discovery_start = client.start_date
-        discovery_end = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        discovery_end = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         # Qualtrics has no documented cancel/delete endpoint for these export jobs.
         # Discovery therefore creates provider-managed jobs solely to infer
@@ -125,7 +136,7 @@ class AuditExport(IncrementalStream):
                     raw = resp_file.json()
                     records = raw if isinstance(raw, list) else raw.get("events", [])
                     return records[:DISCOVERY_SAMPLE_RECORD_LIMIT]
-                except Exception:  # pylint: disable=broad-exception-caught
+                except Exception:  # noqa: BLE001 - pylint: disable=broad-exception-caught
                     return []
 
         def _discover_event(event_name):
@@ -189,13 +200,13 @@ class AuditExport(IncrementalStream):
         self,
         parent_id: Any = None,
         bookmark: str = "",
-    ) -> Iterator[Dict]:
+    ) -> Iterator[dict]:
         event_name = (parent_id or {}).get("name") if isinstance(parent_id, dict) else parent_id
         if not event_name:
             return
 
         start_date = bookmark or self.client.start_date
-        end_date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        end_date = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         body = {"eventName": event_name, "startDate": start_date, "endDate": end_date}
         try:
             start = self.client.post("audit-exports", body)
@@ -209,9 +220,32 @@ class AuditExport(IncrementalStream):
             return
 
         final = self.client.poll_export(f"audit-exports/{export_id}")
+        api_total = _reported_total_from_export_status(final)
         file_id = (final.get("result") or {}).get("fileId", export_id)
 
-        resp = self.client.get_file(f"audit-exports/{export_id}/files/{file_id}")
+        resp = self.client.get_file(f"audit-exports/{export_id}/files/{file_id}", stream=True)
+        emitted_count = 0
+        content_type = ((getattr(resp, "headers", {}) or {}).get("Content-Type") or "").lower()
+
+        if "ndjson" in content_type or "jsonl" in content_type:
+            for line in resp.iter_lines(decode_unicode=True):
+                line = (line or "").strip()
+                if not line:
+                    continue
+                record = json.loads(line)
+                record["event_type"] = event_name
+                emitted_count += 1
+                yield _ensure_record_id(record)
+
+            if api_total is not None and emitted_count != api_total:
+                LOGGER.warning(
+                    "Record-count reconciliation mismatch for %s: emitted=%d, api_total=%d",
+                    event_name,
+                    emitted_count,
+                    api_total,
+                )
+            return
+
         if not resp.content:
             return
         try:
@@ -221,13 +255,21 @@ class AuditExport(IncrementalStream):
                 if line:
                     record = json.loads(line)
                     record["event_type"] = event_name
+                    emitted_count += 1
                     yield _ensure_record_id(record)
+            if api_total is not None and emitted_count != api_total:
+                LOGGER.warning(
+                    "Record-count reconciliation mismatch for %s: emitted=%d, api_total=%d",
+                    event_name,
+                    emitted_count,
+                    api_total,
+                )
             return
         except (json.JSONDecodeError, ValueError):
             pass
         try:
             records = resp.json()
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:  # noqa: BLE001 - pylint: disable=broad-exception-caught
             records = []
             with zipfile.ZipFile(io.BytesIO(resp.content)) as zip_file:
                 for name in zip_file.namelist():
@@ -236,15 +278,25 @@ class AuditExport(IncrementalStream):
             for record in records:
                 record["event_type"] = event_name
                 _ensure_record_id(record)
+                emitted_count += 1
             yield from records
         elif isinstance(records, dict):
             for record in records.get("events", [records]):
                 record["event_type"] = event_name
+                emitted_count += 1
                 yield _ensure_record_id(record)
+
+        if api_total is not None and emitted_count != api_total:
+            LOGGER.warning(
+                "Record-count reconciliation mismatch for %s: emitted=%d, api_total=%d",
+                event_name,
+                emitted_count,
+                api_total,
+            )
 
     def sync(  # pylint: disable=too-many-branches
         self,
-        state: Dict,
+        state: dict,
         transformer: Transformer,
         parent_id: Any = None,
     ) -> int:

@@ -1,15 +1,17 @@
-﻿from tap_qualtrics.streams.abstracts import DirectoryChildStream
+from typing import ClassVar
+
+from tap_qualtrics.streams.abstracts import DirectoryChildStream
 
 
 class Samples(DirectoryChildStream):
     tap_stream_id = "samples"
-    key_properties = ["sampleId"]
+    key_properties: ClassVar = ["sampleId"]
     replication_method = "FULL_TABLE"
     data_key = "result.elements"
     path = "directories/{directory_id}/samples"
     page_size = 100
     parent = "directories"
-    children = ["sample_contacts"]
+    children: ClassVar = ["sample_contacts"]
 
     def get_records(self, parent_id=None):
         directory_id = (parent_id or {}).get("directoryId") or parent_id

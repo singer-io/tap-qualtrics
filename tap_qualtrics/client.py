@@ -3,26 +3,32 @@ import json
 import random
 import re
 import time
-from datetime import datetime, timedelta, timezone
+from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import Any
 from urllib.parse import urlsplit
 
 import backoff
 import requests
 from requests.exceptions import (
     ChunkedEncodingError,
-    ConnectionError as RequestsConnectionError,
     Timeout,
+)
+from requests.exceptions import (
+    ConnectionError as RequestsConnectionError,
 )
 from singer import get_logger, metrics
 
-from tap_qualtrics.exceptions import (ERROR_CODE_EXCEPTION_MAPPING,
-                                      QualtricsBadGatewayError, QualtricsError,
-                                      QualtricsInternalServerError,
-                                      QualtricsRateLimitError,
-                                      QualtricsServiceUnavailableError,
-                                      QualtricsUnauthorizedError)
+from tap_qualtrics.exceptions import (
+    ERROR_CODE_EXCEPTION_MAPPING,
+    QualtricsBadGatewayError,
+    QualtricsError,
+    QualtricsInternalServerError,
+    QualtricsRateLimitError,
+    QualtricsServiceUnavailableError,
+    QualtricsUnauthorizedError,
+)
 
 LOGGER = get_logger()
 REQUEST_TIMEOUT = 300
@@ -104,7 +110,7 @@ class Client:  # pylint: disable=too-many-instance-attributes
     def __init__(
         self,
         config: Mapping[str, Any],
-        config_path: Optional[str] = None,
+        config_path: str | None = None,
     ) -> None:
         self.config = config
         self.config_path = Path(config_path) if config_path else None
@@ -126,7 +132,7 @@ class Client:  # pylint: disable=too-many-instance-attributes
         self.start_date = config.get("start_date")
         self.page_size = int(config.get("page_size", 100))
         self.access_token = config.get("access_token")
-        self.__expires = datetime.now(timezone.utc) - timedelta(seconds=10)
+        self.__expires = datetime.now(UTC) - timedelta(seconds=10)
         self.oauth_token_endpoint = f"https://{self.data_center}.qualtrics.com/oauth2/token"
 
     def __enter__(self):
@@ -143,7 +149,7 @@ class Client:  # pylint: disable=too-many-instance-attributes
         clone._Client__expires = self.__expires  # pylint: disable=protected-access
         return clone
 
-    def _get_headers(self) -> Dict[str, str]:
+    def _get_headers(self) -> dict[str, str]:
         """Get default headers for API requests."""
         return {
             "Content-Type": "application/json"
@@ -176,7 +182,7 @@ class Client:  # pylint: disable=too-many-instance-attributes
                 "Refusing request outside the configured HTTPS Qualtrics origin or with an invalid URL."
             )
 
-    def _build_basic_auth_headers(self) -> Dict[str, str]:
+    def _build_basic_auth_headers(self) -> dict[str, str]:
         """Build Basic auth headers for client credentials token requests."""
         client_id = self.config.get("client_id")
         client_secret = self.config.get("client_secret")
@@ -189,7 +195,7 @@ class Client:  # pylint: disable=too-many-instance-attributes
     def _persist_authorization_code_tokens(
         self,
         access_token: str,
-        refresh_token: Optional[str],
+        refresh_token: str | None,
     ) -> None:
         """Persist refreshed OAuth tokens for subsequent tap runs."""
         if isinstance(self.config, dict):
@@ -248,7 +254,7 @@ class Client:  # pylint: disable=too-many-instance-attributes
         LOGGER.info("Successfully refreshed OAuth2 access token")
 
         expires_in_seconds = token_response.get("expires_in", 60) - 60
-        self.__expires = datetime.now(timezone.utc) + timedelta(
+        self.__expires = datetime.now(UTC) + timedelta(
             seconds=max(expires_in_seconds, 0)
         )
 
@@ -272,7 +278,7 @@ class Client:  # pylint: disable=too-many-instance-attributes
             return
 
         # Check if the token is still valid
-        if self.access_token and datetime.now(timezone.utc) < self.__expires:
+        if self.access_token and datetime.now(UTC) < self.__expires:
             LOGGER.info("Authenticating with OAuth2 client_credentials flow using cached access token")
             return
 
@@ -306,12 +312,12 @@ class Client:  # pylint: disable=too-many-instance-attributes
 
             # Set token expiration time and pad a 60 seconds buffer to avoid using an expired token
             expires_in_seconds = token_response.get("expires_in") - 60
-            self.__expires = datetime.now(timezone.utc) + timedelta(seconds=expires_in_seconds)
+            self.__expires = datetime.now(UTC) + timedelta(seconds=expires_in_seconds)
 
         except requests.exceptions.RequestException as e:
-            raise QualtricsError(f"Failed to obtain OAuth2 token: {str(e)}") from e
+            raise QualtricsError(f"Failed to obtain OAuth2 token: {e!s}") from e
 
-    def authenticate(self, headers: Dict, params: Dict) -> Tuple[Dict, Dict]:
+    def authenticate(self, headers: dict, params: dict) -> tuple[dict, dict]:
         """Authenticates the request with OAuth2 Bearer token"""
         headers["Authorization"] = f"Bearer {self.access_token}"
         return headers, params
@@ -320,11 +326,12 @@ class Client:  # pylint: disable=too-many-instance-attributes
         self,
         method: str,
         endpoint: str,
-        params: Optional[Dict[str, Any]] = None,
-        headers: Optional[Dict[str, Any]] = None,
-        body: Optional[Dict[str, Any]] = None,
-        json: Optional[Dict[str, Any]] = None,
-        path: Optional[str] = None,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, Any] | None = None,
+        body: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+        path: str | None = None,
+        stream: bool = False,
     ) -> Any:
         """
         Sends an HTTP request to the specified API endpoint.
@@ -338,6 +345,12 @@ class Client:  # pylint: disable=too-many-instance-attributes
         headers = headers or {}
         body = body or {}
         headers, params = self.authenticate(headers, params)
+        LOGGER.info(
+            "HTTP_REQUEST method=%s url=%s params=%s",
+            method.upper(),
+            endpoint,
+            params,
+        )
         try:
             return self._make_request(
                 method,
@@ -346,7 +359,8 @@ class Client:  # pylint: disable=too-many-instance-attributes
                 params=params,
                 data=body,
                 json=json,
-                timeout=self.request_timeout
+                timeout=self.request_timeout,
+                stream=stream,
             )
         except QualtricsUnauthorizedError:
             # Token expired mid-sync; force refresh and retry once
@@ -360,7 +374,8 @@ class Client:  # pylint: disable=too-many-instance-attributes
                 params=params,
                 data=body,
                 json=json,
-                timeout=self.request_timeout
+                timeout=self.request_timeout,
+                stream=stream,
             )
 
     @backoff.on_exception(
@@ -399,8 +414,8 @@ class Client:  # pylint: disable=too-many-instance-attributes
     def get(
         self,
         path: str,
-        params: Optional[Dict] = None,
-        full_url: Optional[str] = None,
+        params: dict | None = None,
+        full_url: str | None = None,
     ) -> Any:
         """GET request. Uses full_url when provided (for next-page URLs)."""
         url = full_url or f"{self.base_url}/{path}"
@@ -409,8 +424,8 @@ class Client:  # pylint: disable=too-many-instance-attributes
     def post(
         self,
         path: str,
-        payload: Optional[Dict] = None,
-        full_url: Optional[str] = None,
+        payload: dict | None = None,
+        full_url: str | None = None,
     ) -> Any:
         """POST request with JSON body."""
         url = full_url or f"{self.base_url}/{path}"
@@ -419,14 +434,15 @@ class Client:  # pylint: disable=too-many-instance-attributes
     def get_file(
         self,
         path: str,
-        full_url: Optional[str] = None,
+        full_url: str | None = None,
+        stream: bool = False,
     ) -> requests.Response:
         """GET request returning the raw response (for file downloads)."""
         url = full_url or f"{self.base_url}/{path}"
         headers = dict(self._get_headers())
         # remove Content-Type for binary downloads
         headers.pop("Content-Type", None)
-        return self.make_request("GET", url, headers=headers)
+        return self.make_request("GET", url, headers=headers, stream=stream)
 
     def poll_export(
         self,

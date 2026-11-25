@@ -1,4 +1,5 @@
 ﻿from copy import deepcopy
+from typing import ClassVar
 
 from singer import metrics, utils, write_record
 
@@ -7,14 +8,14 @@ from tap_qualtrics.streams.abstracts import IncrementalStream
 
 class Surveys(IncrementalStream):
     tap_stream_id = "surveys"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     replication_method = "INCREMENTAL"
-    replication_keys = ["lastModified"]
+    replication_keys: ClassVar = ["lastModified"]
     data_key = "result.elements"
-    response_record_fields = {"id": str, "lastModified": str}
+    response_record_fields: ClassVar = {"id": str, "lastModified": str}
     path = "surveys"
     page_size = 100
-    children = [
+    children: ClassVar = [
         "survey",
         "survey_definitions",
         "survey_questions",

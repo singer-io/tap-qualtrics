@@ -1,10 +1,12 @@
-﻿from tap_qualtrics.streams.abstracts import FullTableStream
+from typing import ClassVar
+
+from tap_qualtrics.streams.abstracts import FullTableStream
 
 
 class User(FullTableStream):
     """Individual user detail – child of Users."""
     tap_stream_id = "user"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     replication_method = "FULL_TABLE"
     data_key = "result"
     parent = "users"

@@ -1,7 +1,10 @@
-import unittest
 import base64
-from unittest.mock import patch, MagicMock
+import unittest
+from datetime import UTC
+from unittest.mock import MagicMock, patch
+
 import requests
+
 from tap_qualtrics.client import Client
 from tap_qualtrics.exceptions import QualtricsError
 
@@ -44,9 +47,8 @@ class TestClientOAuth2(unittest.TestCase):
         }
 
         client = Client(config_missing_client_id)
-        with self.assertRaises(QualtricsError) as context:
-            with client:
-                pass
+        with self.assertRaises(QualtricsError) as context, client:
+            pass
         self.assertIn("client_id", str(context.exception))
 
     def test_obtain_oauth_token_missing_client_secret(self):
@@ -57,9 +59,8 @@ class TestClientOAuth2(unittest.TestCase):
         }
 
         client = Client(config_missing_client_secret)
-        with self.assertRaises(QualtricsError) as context:
-            with client:
-                pass
+        with self.assertRaises(QualtricsError) as context, client:
+            pass
         self.assertIn("client_secret", str(context.exception))
 
     def test_oauth2_basic_auth_encoding(self):
@@ -88,7 +89,7 @@ class TestClientOAuth2(unittest.TestCase):
 
         # Create a client and verify it would handle token response correctly
         with patch.object(Client, "_obtain_oauth_token"):
-            client = Client(oauth2_config)
+            Client(oauth2_config)
             # Manually verify the token would be extracted
             token_response = mock_response.json()
             access_token = token_response.get("access_token")
@@ -103,9 +104,8 @@ class TestClientOAuth2(unittest.TestCase):
         mock_post.return_value = mock_response
 
         client = Client(oauth2_config)
-        with self.assertRaises(QualtricsError) as context:
-            with client:
-                pass
+        with self.assertRaises(QualtricsError) as context, client:
+            pass
         self.assertIn("Failed to obtain OAuth2 token", str(context.exception))
 
     @patch("requests.Session.post")
@@ -120,9 +120,8 @@ class TestClientOAuth2(unittest.TestCase):
         mock_post.return_value = mock_response
 
         client = Client(oauth2_config)
-        with self.assertRaises(QualtricsError) as context:
-            with client:
-                pass
+        with self.assertRaises(QualtricsError) as context, client:
+            pass
         self.assertIn("No access_token in OAuth2 response", str(context.exception))
 
     def test_authenticate_bearer_token(self):
@@ -226,10 +225,10 @@ class TestClientOAuth2TokenExpiration(unittest.TestCase):
     @patch("requests.Session.post")
     def test_token_expiration_triggers_refresh(self, mock_post):
         """Test that expired token triggers refresh on next request."""
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta
 
         # Set token as expired
-        self.client._Client__expires = datetime.now(timezone.utc) - timedelta(seconds=60)
+        self.client._Client__expires = datetime.now(UTC) - timedelta(seconds=60)
 
         # Mock successful token refresh
         mock_response = MagicMock()
@@ -248,11 +247,11 @@ class TestClientOAuth2TokenExpiration(unittest.TestCase):
     @patch("requests.Session.post")
     def test_valid_token_not_refreshed(self, mock_post):
         """Test that valid token is not refreshed unnecessarily."""
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta
 
         original_token = self.client.access_token
         # Set token as valid (expires in future)
-        self.client._Client__expires = datetime.now(timezone.utc) + timedelta(seconds=600)
+        self.client._Client__expires = datetime.now(UTC) + timedelta(seconds=600)
 
         # Call _obtain_oauth_token - should return early without refresh
         self.client._obtain_oauth_token()
@@ -265,7 +264,7 @@ class TestClientOAuth2TokenExpiration(unittest.TestCase):
     @patch("requests.Session.post")
     def test_token_expiration_with_buffer(self, mock_post):
         """Test that token expiration uses 60-second buffer."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         expires_in = 7200  # 2 hours
         expected_buffer = 60
@@ -278,9 +277,9 @@ class TestClientOAuth2TokenExpiration(unittest.TestCase):
         }
         mock_post.return_value = mock_response
 
-        before_time = datetime.now(timezone.utc)
+        before_time = datetime.now(UTC)
         self.client._obtain_oauth_token()
-        after_time = datetime.now(timezone.utc)
+        datetime.now(UTC)
 
         # Verify token was obtained
         self.assertEqual(self.client.access_token, "new_token")
@@ -301,23 +300,21 @@ class TestClientOAuth2Integration(unittest.TestCase):
         """Test complete context manager flow with OAuth2."""
         mock_obtain.return_value = None
 
-        with patch.object(Client, "_obtain_oauth_token"):
-            with Client(oauth2_config) as client:
-                self.assertIsNotNone(client)
-                self.assertEqual(client.config["client_id"], oauth2_config["client_id"])
+        with patch.object(Client, "_obtain_oauth_token"), Client(oauth2_config) as client:
+            self.assertIsNotNone(client)
+            self.assertEqual(client.config["client_id"], oauth2_config["client_id"])
 
     @patch("tap_qualtrics.client.Client._obtain_oauth_token")
     def test_session_closed_on_exit(self, mock_obtain):
         """Test that session is properly closed on context manager exit."""
         mock_obtain.return_value = None
 
-        with patch.object(Client, "_obtain_oauth_token"):
-            with patch.object(requests.Session, "close") as mock_close:
-                with Client(oauth2_config) as client:
-                    pass
+        with patch.object(Client, "_obtain_oauth_token"), patch.object(requests.Session, "close") as mock_close:
+            with Client(oauth2_config):
+                pass
 
-                # Verify close was called
-                mock_close.assert_called_once()
+            # Verify close was called
+            mock_close.assert_called_once()
 
     @patch("requests.Session.post")
     def test_post_request_with_json_payload(self, mock_post):
@@ -332,7 +329,7 @@ class TestClientOAuth2Integration(unittest.TestCase):
             client.access_token = "test_token"
 
             with patch.object(client._session, "request", return_value=mock_response) as mock_req:
-                result = client.post("some/endpoint", payload={"key": "value"})
+                client.post("some/endpoint", payload={"key": "value"})
 
                 # Verify the request was made with Bearer token
                 self.assertTrue(mock_req.called)

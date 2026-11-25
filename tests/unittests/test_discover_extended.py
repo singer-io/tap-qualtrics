@@ -3,14 +3,13 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from tap_qualtrics.discover import (
+    _add_dynamic_entries,
     _apply_access_checks,
     _fetch_sample_record,
     _topological_order,
-    _add_dynamic_entries,
     discover,
 )
-from tap_qualtrics.exceptions import QualtricsForbiddenError, QualtricsError
-
+from tap_qualtrics.exceptions import QualtricsError, QualtricsForbiddenError
 
 # ---------------------------------------------------------------------------
 # _topological_order
@@ -139,9 +138,9 @@ class TestApplyAccessChecksExtended(unittest.TestCase):
         dist_cls = MagicMock(return_value=inst_dist)
         dist_cls.parent = "surveys"
 
-        with patch("tap_qualtrics.discover.STREAMS", {"surveys": surveys_cls, "distributions": dist_cls}):
-            with patch("tap_qualtrics.discover._fetch_sample_record", return_value={"id": "SV_1"}):
-                _apply_access_checks(client, schemas, fm)
+        with patch("tap_qualtrics.discover.STREAMS", {"surveys": surveys_cls, "distributions": dist_cls}), \
+             patch("tap_qualtrics.discover._fetch_sample_record", return_value={"id": "SV_1"}):
+            _apply_access_checks(client, schemas, fm)
 
         self.assertIn("surveys", schemas)
         self.assertIn("distributions", schemas)
@@ -149,9 +148,8 @@ class TestApplyAccessChecksExtended(unittest.TestCase):
     def test_raises_forbidden_when_all_inaccessible(self):
         schemas, fm = self._make_schemas("users")
         streams = {"users": self._make_stream_cls(accessible=False)}
-        with patch("tap_qualtrics.discover.STREAMS", streams):
-            with self.assertRaises(QualtricsForbiddenError):
-                _apply_access_checks(MagicMock(), schemas, fm)
+        with patch("tap_qualtrics.discover.STREAMS", streams), self.assertRaises(QualtricsForbiddenError):
+            _apply_access_checks(MagicMock(), schemas, fm)
 
     def test_child_skipped_when_parent_inaccessible(self):
         """Cover line 71: continue when parent_name in inaccessible."""
@@ -163,10 +161,10 @@ class TestApplyAccessChecksExtended(unittest.TestCase):
         dist_cls.parent = "surveys"
 
         streams = {"surveys": surveys_cls, "distributions": dist_cls}
-        with patch("tap_qualtrics.discover.STREAMS", streams):
-            with patch("tap_qualtrics.discover._topological_order", return_value=["surveys", "distributions"]):
-                with self.assertRaises(QualtricsForbiddenError):
-                    _apply_access_checks(MagicMock(), schemas, fm)
+        with patch("tap_qualtrics.discover.STREAMS", streams), \
+             patch("tap_qualtrics.discover._topological_order", return_value=["surveys", "distributions"]), \
+             self.assertRaises(QualtricsForbiddenError):
+            _apply_access_checks(MagicMock(), schemas, fm)
         # distributions should have been pruned because surveys was inaccessible
         self.assertNotIn("distributions", schemas)
 
@@ -190,11 +188,11 @@ class TestApplyAccessChecksExtended(unittest.TestCase):
         dist_cls.parent = "surveys"
 
         streams = {"surveys": surveys_cls, "distributions": dist_cls}
-        with patch("tap_qualtrics.discover.STREAMS", streams):
-            with patch("tap_qualtrics.discover._topological_order", return_value=["surveys", "distributions"]):
-                # Return None from _fetch_sample_record so parent_samples is never populated
-                with patch("tap_qualtrics.discover._fetch_sample_record", return_value=None):
-                    _apply_access_checks(client, schemas, fm)
+        # Return None from _fetch_sample_record so parent_samples is never populated
+        with patch("tap_qualtrics.discover.STREAMS", streams), \
+             patch("tap_qualtrics.discover._topological_order", return_value=["surveys", "distributions"]), \
+             patch("tap_qualtrics.discover._fetch_sample_record", return_value=None):
+            _apply_access_checks(client, schemas, fm)
         # Both should remain accessible since child's check_access returned True
         self.assertIn("surveys", schemas)
         self.assertIn("distributions", schemas)
@@ -264,9 +262,8 @@ class TestAddDynamicEntries(unittest.TestCase):
 class TestDiscoverIntegration(unittest.TestCase):
 
     def test_discover_adds_dynamic_entries_with_client(self):
-        with patch("tap_qualtrics.discover._apply_access_checks"):
-            with patch("tap_qualtrics.discover._add_dynamic_entries") as mock_add:
-                discover(client=MagicMock())
+        with patch("tap_qualtrics.discover._apply_access_checks"), patch("tap_qualtrics.discover._add_dynamic_entries") as mock_add:
+            discover(client=MagicMock())
         mock_add.assert_called_once()
 
     def test_discover_no_client_no_dynamic(self):
@@ -282,9 +279,8 @@ class TestDiscoverIntegration(unittest.TestCase):
                 {"bad_stream": {"type": "object"}},
                 {"bad_stream": []},
             )
-            with patch("tap_qualtrics.discover.Schema.from_dict", side_effect=ValueError("bad schema")):
-                with self.assertRaises(ValueError):
-                    discover(client=None)
+            with patch("tap_qualtrics.discover.Schema.from_dict", side_effect=ValueError("bad schema")), self.assertRaises(ValueError):
+                discover(client=None)
 
     def test_discover_dynamic_stream_in_schemas_is_skipped(self):
         """Cover line 127: continue when stream_name is in _DYNAMIC_SCHEMA_STREAMS."""

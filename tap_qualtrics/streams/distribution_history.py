@@ -1,11 +1,13 @@
-﻿from tap_qualtrics.streams.abstracts import ChildBaseStream
+from typing import ClassVar
+
+from tap_qualtrics.streams.abstracts import ChildBaseStream
 
 
 class DistributionHistory(ChildBaseStream):
     tap_stream_id = "distribution_history"
-    key_properties = ["distributionId", "contactId"]
+    key_properties: ClassVar = ["distributionId", "contactId"]
     replication_method = "INCREMENTAL"
-    replication_keys = ["modifiedDate"]
+    replication_keys: ClassVar = ["modifiedDate"]
     data_key = "result.elements"
     page_size = 100
     parent = "distributions"

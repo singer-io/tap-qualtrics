@@ -1,9 +1,11 @@
-﻿from tap_qualtrics.streams.abstracts import DirectoryChildStream
+from typing import ClassVar
+
+from tap_qualtrics.streams.abstracts import DirectoryChildStream
 
 
 class OptedOutContacts(DirectoryChildStream):
     tap_stream_id = "opted_out_contacts"
-    key_properties = ["contactId"]
+    key_properties: ClassVar = ["contactId"]
     replication_method = "FULL_TABLE"
     data_key = "result.elements"
     path = "directories/{directory_id}/contacts/optedOutContacts"

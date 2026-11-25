@@ -12,13 +12,17 @@ class QualtricsInterruptedSyncTest(InterruptedSyncTest, QualtricsBaseTest):
         return "tap_tester_qualtrics_interrupted_sync_test"
 
     def streams_to_test(self):
-        streams_to_exclude = {
-            # Unsupported Full-Table Streams
-            'users',
-            'groups',
-            'tickets',
+        selected = self.expected_stream_names()
+        exclusions = {
+            stream: reason
+            for stream, reason in {
+                'users': 'Interrupted sync semantics are only validated on incremental streams.',
+                'groups': 'Interrupted sync semantics are only validated on incremental streams.',
+                'tickets': 'Interrupted sync semantics are only validated on incremental streams.',
+            }.items()
+            if stream in selected
         }
-        return self.expected_stream_names().difference(streams_to_exclude)
+        return self.apply_stream_exclusions(selected, exclusions)
 
 
     def manipulate_state(self):

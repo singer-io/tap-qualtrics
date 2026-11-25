@@ -1,12 +1,14 @@
 """Unit tests for stream pagination and async export flows."""
 import json
 import unittest
+from typing import ClassVar
 from unittest.mock import MagicMock
 
 from tap_qualtrics.streams.abstracts import FullTableStream, _get_nested
-from tap_qualtrics.streams.survey_response_export import SurveyResponseExport as SurveyResponseExportStream
+from tap_qualtrics.streams.survey_response_export import (
+    SurveyResponseExport as SurveyResponseExportStream,
+)
 from tap_qualtrics.streams.tickets import Tickets as TicketsStream
-
 
 # ---------------------------------------------------------------------------
 # Helper: build a mock catalog entry
@@ -47,7 +49,7 @@ class TestFullTableStreamPagination(unittest.TestCase):
     def _make_stream(self, pages):
         class ConcreteStream(FullTableStream):
             tap_stream_id = "test_stream"
-            key_properties = ["id"]
+            key_properties: ClassVar = ["id"]
             replication_method = "FULL_TABLE"
             data_key = "result.elements"
             path = "test-resource"

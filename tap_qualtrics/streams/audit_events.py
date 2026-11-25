@@ -1,4 +1,4 @@
-﻿from typing import Any, Dict
+﻿from typing import Any, ClassVar
 from urllib.parse import quote
 
 from singer import Transformer, get_logger, metrics, write_record
@@ -10,14 +10,14 @@ LOGGER = get_logger()
 
 class AuditEvents(FullTableStream):
     tap_stream_id = "audit_events"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     replication_method = "FULL_TABLE"
     data_key = "result.elements"
     path = "logs"
     page_size = 1000
     parent = "audit_events_types"
 
-    def _make_probe_path(self, parent_record: Dict) -> str:
+    def _make_probe_path(self, parent_record: dict) -> str:
         activity_type = (parent_record or {}).get("name", "")
         if not activity_type:
             return ""
@@ -43,7 +43,7 @@ class AuditEvents(FullTableStream):
                 "pageToken": next_token,
             }
 
-    def sync(self, state: Dict, transformer: Transformer, parent_id: Any = None) -> int:
+    def sync(self, state: dict, transformer: Transformer, parent_id: Any = None) -> int:
         with metrics.record_counter(self.tap_stream_id) as counter:
             for record in self.get_records(parent_id):
                 transformed = transformer.transform(record, self.schema, self.mdata)

@@ -1,7 +1,10 @@
 """Comprehensive unit tests for all abstract stream base classes."""
 import unittest
+from datetime import UTC, datetime
+from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
+from tap_qualtrics.exceptions import QualtricsError
 from tap_qualtrics.streams.abstracts import (
     ContactChildStream,
     DirectoryChildStream,
@@ -15,10 +18,10 @@ from tap_qualtrics.streams.abstracts import (
     SegmentChildStream,
     SurveyChildStream,
     TicketChildStream,
+    _bookmark_datetime,
     _get_nested,
 )
 from tap_qualtrics.streams.contact_frequency_rules import ContactFrequencyRules
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -70,7 +73,7 @@ class TestGetNested(unittest.TestCase):
 
 class ConcreteFullTable(FullTableStream):
     tap_stream_id = "test_full"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     data_key = "result.elements"
     path = "test-resource"
     page_size = 100
@@ -186,7 +189,7 @@ class TestBaseStreamHelpers(unittest.TestCase):
     def test_page_size_capped_at_stream_class(self):
         class SmallStream(FullTableStream):
             tap_stream_id = "small"
-            key_properties = ["id"]
+            key_properties: ClassVar = ["id"]
             data_key = "result.elements"
             path = "x"
             page_size = 5
@@ -205,7 +208,7 @@ class TestPagination(unittest.TestCase):
     def _full_table(self, data_key="result.elements"):
         class S(FullTableStream):
             tap_stream_id = "pag_test"
-            key_properties = ["id"]
+            key_properties: ClassVar = ["id"]
             page_size = 10
             path = "res"
 
@@ -285,8 +288,8 @@ class TestFullTableSync(unittest.TestCase):
 
 class ConcreteIncremental(IncrementalStream):
     tap_stream_id = "incr_test"
-    key_properties = ["id"]
-    replication_keys = ["updated_at"]
+    key_properties: ClassVar = ["id"]
+    replication_keys: ClassVar = ["updated_at"]
     data_key = "result.elements"
     path = "res"
     page_size = 100
@@ -375,6 +378,128 @@ class TestIncrementalStream(unittest.TestCase):
         stream.sync(state={}, transformer=transformer)
         child.sync.assert_called_once()
 
+    @patch("tap_qualtrics.streams.abstracts.write_record")
+    @patch("tap_qualtrics.streams.abstracts.get_bookmark", return_value="2021-01-01")
+    @patch("tap_qualtrics.streams.abstracts.BaseStream.is_selected", return_value=True)
+    def test_sync_failure_mid_stream_writes_last_successful_bookmark(self, _, _bk, mock_wr):
+        stream = self._stream()
+        records = iter([
+            {"id": 1, "updated_at": "2021-06-01"},
+            RuntimeError("mid-stream failure"),
+        ])
+
+        def failing_records(*_args, **_kwargs):
+            for item in records:
+                if isinstance(item, Exception):
+                    raise item
+                yield item
+
+        stream.get_records = failing_records
+        transformer = MagicMock()
+        transformer.transform.side_effect = lambda r, *a, **kw: r
+        state = {}
+
+        with self.assertRaises(RuntimeError):
+            stream.sync(state=state, transformer=transformer)
+
+        self.assertEqual(state["bookmarks"]["incr_test"]["updated_at"], "2021-06-01")
+        mock_wr.assert_called_once()
+
+    @patch("tap_qualtrics.streams.abstracts.write_record")
+    @patch("tap_qualtrics.streams.abstracts.get_bookmark", return_value="1900-01-01T00:00:00Z")
+    @patch("tap_qualtrics.streams.abstracts.BaseStream.is_selected", return_value=True)
+    def test_sync_with_far_past_bookmark(self, _, _bk, mock_wr):
+        stream = self._stream()
+        stream.client.get.return_value = {
+            "result": {
+                "elements": [
+                    {"id": 1, "updated_at": "2021-01-01T00:00:00Z"},
+                    {"id": 2, "updated_at": "2021-01-02T00:00:00Z"},
+                ],
+                "nextPage": None,
+            }
+        }
+        transformer = MagicMock()
+        transformer.transform.side_effect = lambda r, *a, **kw: r
+
+        count = stream.sync(state={}, transformer=transformer)
+
+        self.assertEqual(count, 2)
+        self.assertEqual(mock_wr.call_count, 2)
+
+    @patch("tap_qualtrics.streams.abstracts.write_record")
+    @patch("tap_qualtrics.streams.abstracts.get_bookmark", return_value="2999-01-01T00:00:00Z")
+    @patch("tap_qualtrics.streams.abstracts.BaseStream.is_selected", return_value=True)
+    def test_sync_with_far_future_bookmark_no_crash(self, _, _bk, mock_wr):
+        stream = self._stream()
+        stream.client.get.return_value = {
+            "result": {
+                "elements": [{"id": 1, "updated_at": "2021-01-01T00:00:00Z"}],
+                "nextPage": None,
+            }
+        }
+        transformer = MagicMock()
+        transformer.transform.side_effect = lambda r, *a, **kw: r
+        state = {}
+
+        count = stream.sync(state=state, transformer=transformer)
+
+        self.assertEqual(count, 0)
+        mock_wr.assert_not_called()
+        self.assertEqual(state["bookmarks"]["incr_test"]["updated_at"], "2999-01-01T00:00:00Z")
+
+    @patch("tap_qualtrics.streams.abstracts.write_record")
+    @patch("tap_qualtrics.streams.abstracts.get_bookmark", return_value="2999-01-01T00:00:00Z")
+    @patch("tap_qualtrics.streams.abstracts.BaseStream.is_selected", return_value=True)
+    def test_start_date_later_than_all_data_returns_zero(self, _, _bk, mock_wr):
+        stream = self._stream()
+        stream.client.get.return_value = {
+            "result": {
+                "elements": [
+                    {"id": 1, "updated_at": "2021-01-01T00:00:00Z"},
+                    {"id": 2, "updated_at": "2021-01-02T00:00:00Z"},
+                ],
+                "nextPage": None,
+            }
+        }
+        transformer = MagicMock()
+        transformer.transform.side_effect = lambda r, *a, **kw: r
+
+        count = stream.sync(state={}, transformer=transformer)
+
+        self.assertEqual(count, 0)
+        mock_wr.assert_not_called()
+
+    @patch("tap_qualtrics.streams.abstracts.get_bookmark", return_value="2021-01-01T00:00:00Z")
+    @patch("tap_qualtrics.streams.abstracts.BaseStream.is_selected", return_value=True)
+    def test_null_replication_key_raises_qualtrics_error(self, _, _bk):
+        from tap_qualtrics.exceptions import QualtricsError
+
+        stream = self._stream()
+        stream.client.get.return_value = {
+            "result": {"elements": [{"id": 1, "updated_at": None}], "nextPage": None}
+        }
+        transformer = MagicMock()
+        transformer.transform.side_effect = lambda r, *a, **kw: r
+
+        with self.assertRaises(QualtricsError):
+            stream.sync(state={}, transformer=transformer)
+
+    @patch("tap_qualtrics.streams.abstracts.get_bookmark", return_value="2021-01-01T00:00:00Z")
+    @patch("tap_qualtrics.streams.abstracts.BaseStream.is_selected", return_value=True)
+    def test_unexpected_replication_key_type_raises_qualtrics_error(self, _, _bk):
+        from tap_qualtrics.exceptions import QualtricsError
+
+        stream = self._stream()
+        stream.client.get.return_value = {
+            "result": {"elements": [{"id": 1, "updated_at": 1700000000}], "nextPage": None}
+        }
+        transformer = MagicMock()
+        transformer.transform.side_effect = lambda r, *a, **kw: r
+
+        with self.assertRaises(QualtricsError):
+            stream.sync(state={}, transformer=transformer)
+
 
 # ---------------------------------------------------------------------------
 # SurveyChildStream
@@ -382,7 +507,7 @@ class TestIncrementalStream(unittest.TestCase):
 
 class ConcreteSurveyChild(SurveyChildStream):
     tap_stream_id = "survey_child_test"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     data_key = "result.elements"
     path = "surveys/{survey_id}/questions"
     page_size = 100
@@ -418,7 +543,7 @@ class TestSurveyChildStream(unittest.TestCase):
 
 class ConcreteDirectoryChild(DirectoryChildStream):
     tap_stream_id = "dir_child_test"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     data_key = "result.elements"
     path = "directories/{directory_id}/contacts"
     page_size = 100
@@ -460,8 +585,8 @@ class TestDirectoryChildStream(unittest.TestCase):
 
 class ConcreteIncrementalDirChild(IncrementalDirectoryChildStream):
     tap_stream_id = "incr_dir_child_test"
-    key_properties = ["id"]
-    replication_keys = ["lastModified"]
+    key_properties: ClassVar = ["id"]
+    replication_keys: ClassVar = ["lastModified"]
     data_key = "result.elements"
     path = "directories/{directory_id}/lists"
     page_size = 100
@@ -508,7 +633,7 @@ class TestIncrementalDirectoryChildStream(unittest.TestCase):
 
 class ConcreteMailingListChild(MailingListChildStream):
     tap_stream_id = "ml_child_test"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     data_key = "result.elements"
     path = "directories/{directory_id}/mailinglists/{mailing_list_id}/contacts"
     page_size = 100
@@ -559,7 +684,7 @@ class TestMailingListChildStream(unittest.TestCase):
 
 class ConcreteGroupChild(GroupChildStream):
     tap_stream_id = "grp_child_test"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     data_key = "result.elements"
     path = "groups/{group_id}/members"
     page_size = 100
@@ -594,7 +719,7 @@ class TestGroupChildStream(unittest.TestCase):
 
 class ConcreteLibraryChild(LibraryChildStream):
     tap_stream_id = "lib_child_test"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     data_key = "result.elements"
     path = "libraries/{library_id}/messages"
     page_size = 100
@@ -632,7 +757,7 @@ class TestLibraryChildStream(unittest.TestCase):
 
 class ConcreteSampleChild(SampleChildStream):
     tap_stream_id = "sample_child_test"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     data_key = "result.elements"
     path = "directories/{directory_id}/samples/{sample_id}/contacts"
     page_size = 100
@@ -677,7 +802,7 @@ class TestSampleChildStream(unittest.TestCase):
 
 class ConcreteSegmentChild(SegmentChildStream):
     tap_stream_id = "seg_child_test"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     data_key = "result.elements"
     path = "directories/{directory_id}/segments/{segment_id}/contacts"
     page_size = 100
@@ -722,7 +847,7 @@ class TestSegmentChildStream(unittest.TestCase):
 
 class ConcreteContactChild(ContactChildStream):
     tap_stream_id = "contact_child_test"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     data_key = "result.elements"
     path = "directories/{directory_id}/contacts/{contact_id}/transactions"
     page_size = 100
@@ -767,7 +892,7 @@ class TestContactChildStream(unittest.TestCase):
 
 class ConcreteTicketChild(TicketChildStream):
     tap_stream_id = "ticket_child_test"
-    key_properties = ["id"]
+    key_properties: ClassVar = ["id"]
     data_key = "result.elements"
     path = "tickets/{ticket_id}/root-causes"
     page_size = 100
@@ -811,6 +936,28 @@ class TestTicketChildStream(unittest.TestCase):
 
     def test_probe_path_no_id(self):
         self.assertEqual(self._stream()._make_probe_path({}), "")
+
+
+# ---------------------------------------------------------------------------
+# _bookmark_datetime
+# ---------------------------------------------------------------------------
+
+class TestBookmarkDatetime(unittest.TestCase):
+
+    def test_naive_datetime_gets_utc_tzinfo(self):
+        naive = datetime(2024, 1, 1, 12, 0, 0)
+        result = _bookmark_datetime(naive)
+        self.assertEqual(result, naive.replace(tzinfo=UTC))
+
+    def test_aware_datetime_is_converted_to_utc(self):
+        from datetime import timedelta, timezone
+        aware = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone(timedelta(hours=5)))
+        result = _bookmark_datetime(aware)
+        self.assertEqual(result, aware.astimezone(UTC))
+
+    def test_invalid_string_raises_qualtrics_error(self):
+        with self.assertRaises(QualtricsError):
+            _bookmark_datetime("not-a-real-timestamp")
 
 
 if __name__ == "__main__":

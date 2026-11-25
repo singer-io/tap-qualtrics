@@ -1,65 +1,240 @@
 version: 2.1
+
 jobs:
-  build:
+  quality_and_unit:
+    parameters:
+      python_version:
+        type: string
+      dependency_profile:
+        type: enum
+        enum: ["pinned", "minimum"]
+        default: "pinned"
+      notify_on_fail:
+        type: boolean
+        default: false
+      run_non_functional_tests:
+        type: boolean
+        default: false
+      enforce_contract_fixture_coverage:
+        type: boolean
+        default: false
+      run_live_schema_contract:
+        type: boolean
+        default: false
     docker:
       - image: 218546966473.dkr.ecr.us-east-1.amazonaws.com/circle-ci:stitch-tap-tester-uv
     steps:
       - checkout
       - run:
-          name: "Setup virtual env"
+          name: "Setup virtual env (Python << parameters.python_version >>)"
           command: |
-            uv venv --python 3.12 /usr/local/share/virtualenvs/tap-qualtrics
+            uv venv --python << parameters.python_version >> /usr/local/share/virtualenvs/tap-qualtrics
             source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
             uv pip install -U setuptools
-            uv pip install .[dev]
+      - run:
+          name: "Install dependencies (<< parameters.dependency_profile >>)"
+          command: |
+            source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
+            if [ "<< parameters.dependency_profile >>" = "minimum" ]; then
+              uv pip install .
+              uv pip install \
+                "pytest>=7,<8" \
+                "coverage>=7,<8" \
+                "jsonschema>=4,<5" \
+                "responses>=0.24,<0.25" \
+                "vcrpy>=6,<7" \
+                "parameterized>=0.9,<0.10"
+            else
+              uv pip install .[dev]
+            fi
+            uv pip install "ruff>=0.8,<1" "bandit>=1.7.10,<2" "pip-audit>=2.7,<3"
       - run:
           name: "JSON Validator"
           command: |
             source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
             stitch-validate-json tap_qualtrics/schemas/*.json
       - run:
-          name: "pylint"
+          name: "Ruff"
           command: |
             source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
-            uv pip install pylint
-            pylint tap_qualtrics -d C,R,W
+            ruff check tap_qualtrics tests
+      - run:
+          name: "Bandit"
+          command: |
+            source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
+            bandit -q -r tap_qualtrics -ll
+      - run:
+          name: "pip-audit"
+          command: |
+            source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
+            pip-audit --skip-editable
       - add_ssh_keys
       - run:
           name: "Unit Tests"
           command: |
             source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
-            uv pip install pytest coverage
             mkdir -p test_output
-            coverage run -m pytest tests/unittests --junitxml=test_output/report.xml
+            coverage run --branch --source=tap_qualtrics -m pytest tests/unittests --junitxml=test_output/report.xml
       - run:
-          name: 'Coverage Report'
+          name: "Coverage Report"
           command: |
             source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
             coverage report -m --fail-under=99 | tee coverage.txt
             coverage html
+      - run:
+          name: "Mutation Tests (optional)"
+          command: |
+            source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
+            if [ "${RUN_MUTATION_TESTS:-0}" = "1" ]; then
+              uv pip install mutmut
+              chmod +x scripts/run_mutation_tests.sh
+              ./scripts/run_mutation_tests.sh
+            else
+              echo "Skipping mutation tests (set RUN_MUTATION_TESTS=1 to enable)."
+            fi
+      - run:
+          name: "Non-functional Export Tests (optional)"
+          command: |
+            source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
+            if [ "<< parameters.run_non_functional_tests >>" = "true" ]; then
+              python -m pytest tests/unittests/test_nonfunctional_exports.py -q
+            else
+              echo "Skipping non-functional export tests (set run_non_functional_tests: true to enable)."
+            fi
+      - run:
+          name: "Contract Replay Tests (offline fixtures)"
+          command: |
+            source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
+            if [ "<< parameters.enforce_contract_fixture_coverage >>" = "true" ]; then
+              ENFORCE_CONTRACT_FIXTURE_COVERAGE=1 python -m pytest tests/contracts/test_stream_contract_replay.py -q
+            else
+              ENFORCE_CONTRACT_FIXTURE_COVERAGE=0 python -m pytest tests/contracts/test_stream_contract_replay.py -q
+            fi
+      - run:
+          name: "Live Schema Contract Check (nightly optional)"
+          command: |
+            source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
+            if [ "<< parameters.run_live_schema_contract >>" = "true" ]; then
+              if [ -z "${QUALTRICS_CONTRACT_CONFIG:-}" ]; then
+                echo "QUALTRICS_CONTRACT_CONFIG must be set when run_live_schema_contract: true"
+                exit 1
+              fi
+              python -m pytest tests/contracts/test_live_schema_contract.py -q -m live_contract
+            else
+              echo "Skipping live schema contract check (set run_live_schema_contract: true to enable)."
+            fi
+      - run:
+          name: "Publish per-stream test matrix"
+          command: |
+            source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
+            mkdir -p test_output
+            python scripts/generate_stream_test_matrix.py
       - store_test_results:
           path: test_output/report.xml
       - store_artifacts:
           path: htmlcov
       - store_artifacts:
           path: coverage.txt
+      - store_artifacts:
+          path: test_output/stream_test_matrix.md
+      - store_artifacts:
+          path: test_output/stream_test_matrix.csv
+      - when:
+          condition: << parameters.notify_on_fail >>
+          steps:
+            - run:
+                name: "Nightly failure alert"
+                when: on_fail
+                command: |
+                  if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
+                    echo "SLACK_WEBHOOK_URL is not set; skipping nightly alert."
+                    exit 0
+                  fi
+                  payload=$(cat \<<'JSON'
+                  {
+                    "text": ":rotating_light: tap-qualtrics nightly quality/unit job failed on master. Check CircleCI workflow for details."
+                  }
+                  JSON
+                  )
+                  curl -sS -X POST -H "Content-type: application/json" --data "$payload" "$SLACK_WEBHOOK_URL"
+
+  integration_tests:
+    parameters:
+      stream_group:
+        type: string
+      stream_tier:
+        type: string
+        default: "pr"
+      notify_on_fail:
+        type: boolean
+        default: false
+    docker:
+      - image: 218546966473.dkr.ecr.us-east-1.amazonaws.com/circle-ci:stitch-tap-tester-uv
+    steps:
+      - checkout
       - run:
-          name: "Integration Tests"
+          name: "Integration Tests (group=<< parameters.stream_group >>, tier=<< parameters.stream_tier >>)"
           command: |
-            source /usr/local/share/virtualenvs/tap-tester/bin/activate
+            uv venv --python 3.12 /usr/local/share/virtualenvs/tap-qualtrics
+            source /usr/local/share/virtualenvs/tap-qualtrics/bin/activate
+            uv pip install -U setuptools
+            uv pip install .
             uv pip install --upgrade awscli
-            aws s3 cp s3://com-stitchdata-dev-deployment-assets/environments/tap-tester/tap_tester_sandbox dev_env.sh
-            source dev_env.sh
+            aws s3 cp s3://com-stitchdata-dev-deployment-assets/environments/tap-tester/tap_tester_sandbox /usr/local/share/virtualenvs/tap-qualtrics/dev_env.sh
+            deactivate
+            source /usr/local/share/virtualenvs/tap-qualtrics/dev_env.sh
             unset USE_STITCH_BACKEND
+            export TAP_QUALTRICS_TEST_STREAM_TIER="<< parameters.stream_tier >>"
+            export TAP_QUALTRICS_TEST_STREAM_GROUP="<< parameters.stream_group >>"
+            source /usr/local/share/virtualenvs/tap-tester/bin/activate
             run-test --tap=tap-qualtrics tests
+      - when:
+          condition: << parameters.notify_on_fail >>
+          steps:
+            - run:
+                name: "Nightly failure alert"
+                when: on_fail
+                command: |
+                  if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
+                    echo "SLACK_WEBHOOK_URL is not set; skipping nightly alert."
+                    exit 0
+                  fi
+                  payload=$(cat \<<'JSON'
+                  {
+                    "text": ":rotating_light: tap-qualtrics nightly integration shard failed on master. Check CircleCI workflow for details."
+                  }
+                  JSON
+                  )
+                  curl -sS -X POST -H "Content-type: application/json" --data "$payload" "$SLACK_WEBHOOK_URL"
 
 
 workflows:
   version: 2
   commit:
     jobs:
-      - build:
+      - quality_and_unit:
+          name: quality-unit-py3.12
           context: circleci-user
+          python_version: "3.12"
+          dependency_profile: "pinned"
+      - quality_and_unit:
+          name: quality-unit-min-deps-py3.12
+          context: circleci-user
+          python_version: "3.12"
+          dependency_profile: "minimum"
+      - integration_tests:
+          name: integration-pr-core
+          context: circleci-user
+          stream_group: "pr-core"
+          stream_tier: "pr"
+      - integration_tests:
+          name: integration-pr-stateful
+          context: circleci-user
+          stream_group: "pr-stateful"
+          stream_tier: "pr"
+          requires:
+            - integration-pr-core
+
   build_daily:
     triggers:
       - schedule:
@@ -69,5 +244,34 @@ workflows:
               only:
                 - master
     jobs:
-      - build:
+      - quality_and_unit:
+          name: nightly-quality-py3.12
           context: circleci-user
+          python_version: "3.12"
+          dependency_profile: "pinned"
+          notify_on_fail: true
+          run_live_schema_contract: true
+          enforce_contract_fixture_coverage: true
+          run_non_functional_tests: true
+      - integration_tests:
+          name: nightly-integration-core
+          context: circleci-user
+          stream_group: "nightly-core"
+          stream_tier: "nightly"
+          notify_on_fail: true
+      - integration_tests:
+          name: nightly-integration-catalog
+          context: circleci-user
+          stream_group: "nightly-catalog"
+          stream_tier: "nightly"
+          notify_on_fail: true
+          requires:
+            - nightly-integration-core
+      - integration_tests:
+          name: nightly-integration-incremental
+          context: circleci-user
+          stream_group: "nightly-incremental"
+          stream_tier: "nightly"
+          notify_on_fail: true
+          requires:
+            - nightly-integration-catalog

@@ -1,8 +1,13 @@
 """Unit tests for discovery access-check logic."""
 import unittest
+from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
-from tap_qualtrics.discover import _apply_access_checks, _prune_inaccessible_children, discover
+from tap_qualtrics.discover import (
+    _apply_access_checks,
+    _prune_inaccessible_children,
+    discover,
+)
 from tap_qualtrics.exceptions import QualtricsForbiddenError
 
 
@@ -88,9 +93,8 @@ class TestApplyAccessChecks(unittest.TestCase):
             "users": self._make_mock_stream_cls(accessible=False),
             "groups": self._make_mock_stream_cls(accessible=False),
         }
-        with patch("tap_qualtrics.discover.STREAMS", streams):
-            with self.assertRaises(QualtricsForbiddenError):
-                _apply_access_checks(MagicMock(), schemas, fm)
+        with patch("tap_qualtrics.discover.STREAMS", streams), self.assertRaises(QualtricsForbiddenError):
+            _apply_access_checks(MagicMock(), schemas, fm)
 
     def test_child_streams_cascade_removed_with_parent(self):
         # Include a second accessible parent so schemas is not empty after removal
@@ -154,8 +158,8 @@ class TestCheckAccess(unittest.TestCase):
 
         class ConcreteStream(FullTableStream):
             tap_stream_id = "test"
-            key_properties = ["id"]
-            children = []
+            key_properties: ClassVar = ["id"]
+            children: ClassVar = []
 
             def sync(self, state, transformer, parent_id=None):
                 return 0

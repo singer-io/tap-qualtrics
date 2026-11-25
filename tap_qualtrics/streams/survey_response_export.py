@@ -1,6 +1,7 @@
 import json
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, Iterator
+from typing import Any, ClassVar
 
 import backoff
 from singer import (
@@ -18,10 +19,10 @@ from tap_qualtrics.client import Client
 from tap_qualtrics.exceptions import (
     QualtricsBackoffError,
     QualtricsBadGatewayError,
-    QualtricsRateLimitError,
     QualtricsError,
     QualtricsForbiddenError,
     QualtricsPaginationError,
+    QualtricsRateLimitError,
 )
 from tap_qualtrics.streams.abstracts import IncrementalStream
 
@@ -38,11 +39,21 @@ DISCOVERY_MAX_STALE_PAGES = 3
 # healthy large-account discovery remains observable instead of silent until it finishes.
 DISCOVERY_PROGRESS_LOG_INTERVAL = 100
 
+
+def _reported_total_from_export_status(status_response: dict) -> int | None:
+    """Best-effort extraction of API-reported record totals from export status payloads."""
+    result = (status_response or {}).get("result") or {}
+    for key in ("recordCount", "totalResponses", "totalCount", "count"):
+        value = result.get(key)
+        if isinstance(value, int) and value >= 0:
+            return value
+    return None
+
 class SurveyResponseExport(IncrementalStream):
     tap_stream_id = "survey_response_export"
-    key_properties = ["responseId"]
+    key_properties: ClassVar = ["responseId"]
     replication_method = "INCREMENTAL"
-    replication_keys = ["recorded_date"]
+    replication_keys: ClassVar = ["recorded_date"]
     data_key = "responses"
     parent = "surveys"
     dynamic_schema = True
@@ -69,9 +80,9 @@ class SurveyResponseExport(IncrementalStream):
         while has_more_pages:
             if next_url is not None and next_url in seen_urls:
                 raise QualtricsPaginationError(
-                    "GET /surveys returned a repeated nextPage URL ({}) during discovery "
-                    "after {} page(s); refusing to loop forever or silently return a partial "
-                    "survey listing.".format(next_url, page_count)
+                    f"GET /surveys returned a repeated nextPage URL ({next_url}) during discovery "
+                    f"after {page_count} page(s); refusing to loop forever or silently return a partial "
+                    "survey listing."
                 )
             if next_url is not None:
                 seen_urls.add(next_url)
@@ -87,8 +98,8 @@ class SurveyResponseExport(IncrementalStream):
                 # A 403 after at least one successful page means pagination stopped before
                 # completion; failing here prevents silently emitting a partial catalog.
                 raise QualtricsPaginationError(
-                    "GET /surveys returned 403 during discovery after {} page(s); refusing "
-                    "to continue with a partial survey listing.".format(page_count)
+                    f"GET /surveys returned 403 during discovery after {page_count} page(s); refusing "
+                    "to continue with a partial survey listing."
                 ) from exc
             page_count += 1
             result = surveys_resp.get("result") or {}
@@ -105,8 +116,8 @@ class SurveyResponseExport(IncrementalStream):
             next_url = result.get("nextPage")
             if next_url is not None and not isinstance(next_url, str):
                 raise QualtricsPaginationError(
-                    "GET /surveys returned invalid nextPage type {} during discovery after {} "
-                    "page(s); expected a URL string or null.".format(type(next_url).__name__, page_count)
+                    f"GET /surveys returned invalid nextPage type {type(next_url).__name__} during discovery after {page_count} "
+                    "page(s); expected a URL string or null."
                 )
             has_more_pages = bool(next_url)
 
@@ -118,11 +129,11 @@ class SurveyResponseExport(IncrementalStream):
                 stale_page_count += 1
                 if stale_page_count >= DISCOVERY_MAX_STALE_PAGES:
                     raise QualtricsPaginationError(
-                        "GET /surveys returned {} consecutive page(s) during discovery with no "
-                        "new survey ids, after {} page(s) total, while still reporting more "
+                        f"GET /surveys returned {stale_page_count} consecutive page(s) during discovery with no "
+                        f"new survey ids, after {page_count} page(s) total, while still reporting more "
                         "pages; refusing to loop forever or silently return a partial survey "
                         "listing. This likely indicates the API is not making forward progress."
-                        .format(stale_page_count, page_count)
+                        
                     )
             else:
                 stale_page_count = 0
@@ -239,7 +250,7 @@ class SurveyResponseExport(IncrementalStream):
         self,
         parent_id: Any = None,
         bookmark: str = "",
-    ) -> Iterator[Dict]:
+    ) -> Iterator[dict]:
         survey_id = (parent_id or {}).get("id") or parent_id
         if not survey_id:
             return
@@ -257,18 +268,53 @@ class SurveyResponseExport(IncrementalStream):
             return
 
         final = self.client.poll_export(f"surveys/{survey_id}/export-responses/{export_id}")
+        api_total = _reported_total_from_export_status(final)
         file_id = (final.get("result") or {}).get("fileId", "")
         if not file_id:
             return
 
-        resp = self.client.get_file(f"surveys/{survey_id}/export-responses/{file_id}/file")
+        resp = self.client.get_file(f"surveys/{survey_id}/export-responses/{file_id}/file", stream=True)
+        emitted_count = 0
+        content_type = ((getattr(resp, "headers", {}) or {}).get("Content-Type") or "").lower()
+
+        if "ndjson" in content_type or "jsonl" in content_type:
+            for line in resp.iter_lines(decode_unicode=True):
+                line = (line or "").strip()
+                if not line:
+                    continue
+                response = json.loads(line)
+                response["survey_id"] = survey_id
+                response["recorded_date"] = (response.get("values") or {}).get("recordedDate", "")
+                emitted_count += 1
+                yield response
+
+            if api_total is not None and emitted_count != api_total:
+                LOGGER.warning(
+                    "Record-count reconciliation mismatch for survey %s: emitted=%d, api_total=%d",
+                    survey_id,
+                    emitted_count,
+                    api_total,
+                )
+            return
+
+        if not resp.content:
+            return
         data = json.loads(resp.content)
         for response in data.get("responses", []):
             response["survey_id"] = survey_id
             response["recorded_date"] = (response.get("values") or {}).get("recordedDate", "")
+            emitted_count += 1
             yield response
 
-    def sync(self, state: Dict, transformer: Transformer, parent_id: Any = None) -> int:
+        if api_total is not None and emitted_count != api_total:
+            LOGGER.warning(
+                "Record-count reconciliation mismatch for survey %s: emitted=%d, api_total=%d",
+                survey_id,
+                emitted_count,
+                api_total,
+            )
+
+    def sync(self, state: dict, transformer: Transformer, parent_id: Any = None) -> int:
         survey_id = (parent_id or {}).get("id") or parent_id
         if not survey_id:
             return 0

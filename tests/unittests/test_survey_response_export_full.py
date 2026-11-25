@@ -3,13 +3,15 @@ import json
 import unittest
 from unittest.mock import MagicMock, patch
 
-from tap_qualtrics.streams.survey_response_export import SurveyResponseExport
 from tap_qualtrics.exceptions import (
     QualtricsBackoffError,
     QualtricsBadGatewayError,
     QualtricsError,
     QualtricsForbiddenError,
+    QualtricsPaginationError,
+    QualtricsRateLimitError,
 )
+from tap_qualtrics.streams.survey_response_export import SurveyResponseExport
 
 
 def _make_client():
@@ -103,6 +105,42 @@ class TestSurveyResponseExportGetRecords(unittest.TestCase):
         call_body = stream.client.post.call_args[0][1]
         self.assertEqual(call_body["startDate"], "2021-06-01")
 
+    def test_ndjson_content_type_skips_blank_lines(self):
+        """Line 244: blank line in NDJSON content-type streaming response is skipped."""
+        stream = self._stream()
+        stream.client.post.return_value = {"result": {"progressId": "pid1"}}
+        stream.client.poll_export.return_value = {"result": {"status": "complete", "fileId": "fid1"}}
+        file_resp = MagicMock()
+        file_resp.headers = {"Content-Type": "application/x-ndjson"}
+        file_resp.iter_lines.return_value = iter([
+            json.dumps({"responseId": "R_1", "values": {"recordedDate": "2021-01-01"}}),
+            "",
+            json.dumps({"responseId": "R_2", "values": {"recordedDate": "2021-01-02"}}),
+        ])
+        stream.client.get_file.return_value = file_resp
+
+        records = list(stream.get_records(parent_id={"id": "SV_1"}))
+
+        self.assertEqual(len(records), 2)
+
+    def test_record_count_mismatch_logs_warning(self):
+        """Line 270: reconciliation mismatch warning when emitted count != API-reported total."""
+        stream = self._stream()
+        stream.client.post.return_value = {"result": {"progressId": "pid1"}}
+        stream.client.poll_export.return_value = {
+            "result": {"status": "complete", "fileId": "fid1", "recordCount": 5}
+        }
+        file_resp = MagicMock()
+        responses = [{"responseId": "R_1", "values": {"recordedDate": "2021-01-01"}}]
+        file_resp.content = json.dumps({"responses": responses}).encode()
+        stream.client.get_file.return_value = file_resp
+
+        with patch("tap_qualtrics.streams.survey_response_export.LOGGER") as mock_logger:
+            records = list(stream.get_records(parent_id={"id": "SV_1"}))
+
+        self.assertEqual(len(records), 1)
+        mock_logger.warning.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # sync
@@ -137,12 +175,12 @@ class TestSurveyResponseExportSync(unittest.TestCase):
         stream = self._stream()
         records = [{"responseId": "R_1", "recorded_date": "2021-06-01"}]
 
-        with patch("tap_qualtrics.streams.survey_response_export.get_bookmark", return_value="2021-01-01"):
-            with patch("singer.write_bookmark") as mock_wb:
-                with patch.object(stream, "get_records", return_value=iter(records)):
-                    transformer = MagicMock()
-                    transformer.transform.side_effect = lambda r, *a, **kw: r
-                    stream.sync(state={}, transformer=transformer, parent_id={"id": "SV_1"})
+        with patch("tap_qualtrics.streams.survey_response_export.get_bookmark", return_value="2021-01-01"), \
+                patch("singer.write_bookmark"), \
+                patch.object(stream, "get_records", return_value=iter(records)):
+            transformer = MagicMock()
+            transformer.transform.side_effect = lambda r, *a, **kw: r
+            stream.sync(state={}, transformer=transformer, parent_id={"id": "SV_1"})
 
         mock_wr.assert_called_once()
 
@@ -152,12 +190,12 @@ class TestSurveyResponseExportSync(unittest.TestCase):
         stream = self._stream()
         records = [{"responseId": "R_1", "recorded_date": "2020-01-01"}]
 
-        with patch("tap_qualtrics.streams.survey_response_export.get_bookmark", return_value="2021-06-01"):
-            with patch("singer.write_bookmark"):
-                with patch.object(stream, "get_records", return_value=iter(records)):
-                    transformer = MagicMock()
-                    transformer.transform.side_effect = lambda r, *a, **kw: r
-                    stream.sync(state={}, transformer=transformer, parent_id={"id": "SV_1"})
+        with patch("tap_qualtrics.streams.survey_response_export.get_bookmark", return_value="2021-06-01"), \
+                patch("singer.write_bookmark"), \
+                patch.object(stream, "get_records", return_value=iter(records)):
+            transformer = MagicMock()
+            transformer.transform.side_effect = lambda r, *a, **kw: r
+            stream.sync(state={}, transformer=transformer, parent_id={"id": "SV_1"})
 
         mock_wr.assert_not_called()
 
@@ -187,18 +225,19 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
                 executor.__enter__.return_value = executor
                 executor.map.return_value = []
 
-                def start_workers(**kwargs):
-                    self.assertEqual(client.get.call_count, 2)
-                    client.post.assert_not_called()
+                def start_workers(*, _client=client, _total_surveys=total_surveys,
+                                  _executor=executor, **kwargs):
+                    self.assertEqual(_client.get.call_count, 2)
+                    _client.post.assert_not_called()
                     logger.info.assert_called_once_with(
                         "Survey response export discovery: listed %d unique survey(s) across "
                         "%d page(s); preparing one sample export per survey with at most %d "
                         "concurrent workers and %d records per sample. Retries may create "
                         "additional jobs. Qualtrics has no documented cancel/delete endpoint "
                         "for these jobs; large accounts may take longer and consume more API quota.",
-                        total_surveys, 2, min(4, total_surveys), 50,
+                        _total_surveys, 2, min(4, _total_surveys), 50,
                     )
-                    return executor
+                    return _executor
 
                 mock_executor.side_effect = start_workers
                 SurveyResponseExport.discover_dynamic_entries(client)
@@ -319,6 +358,17 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
         entries, _ = SurveyResponseExport.discover_dynamic_entries(client)
         self.assertEqual(entries, [])
 
+    def test_rate_limited_survey_is_skipped(self):
+        """Lines 157 & 189: QualtricsRateLimitError from _fetch_records -> 'rate_limited' status skip."""
+        client = _make_client()
+        client.get.return_value = {"result": {"elements": [{"id": "SV_1"}]}}
+        client.post.side_effect = QualtricsRateLimitError("rate limited")
+
+        entries, skipped = SurveyResponseExport.discover_dynamic_entries(client)
+
+        self.assertEqual(entries, [])
+        self.assertEqual(skipped, ["SV_1"])
+
     def test_successful_discovery(self):
         client = _make_client()
         client.get.return_value = {"result": {"elements": [{"id": "SV_1"}]}}
@@ -331,7 +381,7 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
 
         entries, _ = SurveyResponseExport.discover_dynamic_entries(client)
         self.assertEqual(len(entries), 1)
-        stream_name, schema, key_props = entries[0]
+        stream_name, _schema, _key_props = entries[0]
         self.assertEqual(stream_name, "survey_response_export__SV_1")
 
     def test_no_export_id_in_discover_skips(self):
@@ -365,7 +415,7 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
         client = _make_client()
         client.get.return_value = {"result": {"elements": [{"id": "SV_1"}]}}
         client.post.side_effect = Exception("unexpected")
-        with self.assertRaises(Exception):
+        with self.assertRaises(Exception):  # noqa: B017 - asserting generic Exception propagates unmodified
             SurveyResponseExport.discover_dynamic_entries(client)
 
     def test_survey_with_no_id_skipped(self):
@@ -409,8 +459,13 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
         discovered_ids = sorted(name.rsplit("__", 1)[1] for name, _, _ in entries)
         self.assertEqual(discovered_ids, ["SV_1", "SV_2"])
         self.assertEqual(skipped, [])
+        first_call = client.get.call_args_list[0]
+        self.assertEqual(first_call.args[0], "surveys")
+        self.assertEqual(first_call.kwargs.get("params"), {"pageSize": 100})
+        self.assertIsNone(first_call.kwargs.get("full_url"))
         # Second page must be requested via the full nextPage URL, not re-derived params.
         second_call = client.get.call_args_list[1]
+        self.assertIsNone(second_call.kwargs.get("params"))
         self.assertEqual(second_call.kwargs.get("full_url"), page_one["result"]["nextPage"])
 
     def test_forbidden_on_later_page_raises_instead_of_partial_catalog(self):
@@ -455,13 +510,13 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
             page_index = 0 if not full_url else int(full_url.rsplit("=", 1)[1])
             next_index = page_index + 1
             next_url = (
-                "https://qualtrics.example.com/surveys?page={}".format(next_index)
+                f"https://qualtrics.example.com/surveys?page={next_index}"
                 if next_index < total_surveys
                 else None
             )
             return {
                 "result": {
-                    "elements": [{"id": "SV_{}".format(page_index)}],
+                    "elements": [{"id": f"SV_{page_index}"}],
                     "nextPage": next_url,
                 }
             }
@@ -483,12 +538,16 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
         # Every survey, including the 1,001st (which the old max_pages=1000 cap would have
         # dropped), must be present.
         self.assertIn("SV_1000", discovered_ids)
+        first_call = client.get.call_args_list[0]
+        self.assertEqual(first_call.kwargs.get("params"), {"pageSize": 100})
+        self.assertIsNone(first_call.kwargs.get("full_url"))
+        for page_call in client.get.call_args_list[1:]:
+            self.assertIsNone(page_call.kwargs.get("params"))
+            self.assertIsInstance(page_call.kwargs.get("full_url"), str)
 
     def test_repeated_next_page_url_raises_instead_of_looping_forever(self):
         """If the API returns the same nextPage URL forever (a looping/misbehaving API),
         discovery must fail loudly rather than hang or silently return a partial listing."""
-        from tap_qualtrics.exceptions import QualtricsPaginationError
-
         client = _make_client()
         looping_url = "https://qualtrics.example.com/surveys?skipToken=stuck"
 
@@ -527,13 +586,13 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
             page_index = 0 if not full_url else int(full_url.rsplit("=", 1)[1])
             next_index = page_index + 1
             next_url = (
-                "https://qualtrics.example.com/surveys?page={}".format(next_index)
+                f"https://qualtrics.example.com/surveys?page={next_index}"
                 if next_index < total_surveys
                 else None
             )
             return {
                 "result": {
-                    "elements": [{"id": "SV_{}".format(page_index)}],
+                    "elements": [{"id": f"SV_{page_index}"}],
                     "nextPage": next_url,
                 }
             }

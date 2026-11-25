@@ -1,7 +1,7 @@
-﻿from typing import Dict
-
+﻿
 import singer
 from singer import metadata
+
 from tap_qualtrics.client import Client
 from tap_qualtrics.streams import STREAMS
 
@@ -11,7 +11,7 @@ LOGGER = singer.get_logger()
 _DYNAMIC_SCHEMA_BASES = {"audit_export", "survey_response_export"}
 
 
-def update_currently_syncing(state: Dict, stream_name: str) -> None:
+def update_currently_syncing(state: dict, stream_name: str) -> None:
     if not stream_name and singer.get_currently_syncing(state):
         del state["currently_syncing"]
     else:
@@ -62,9 +62,9 @@ def write_schema(
 
 def sync(
     client: Client,
-    config: Dict,
+    config: dict,
     catalog: singer.Catalog,
-    state: Dict,
+    state: dict,
 ) -> None:  # pylint: disable=unused-argument
     _ = config
     streams_to_sync = [s.stream for s in catalog.get_selected_streams(state)]
