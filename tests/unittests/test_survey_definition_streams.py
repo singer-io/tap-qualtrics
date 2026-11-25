@@ -1,10 +1,12 @@
 """Tests for the survey definitions, questions, and flows streams."""
 import copy
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 import singer
 from jsonschema import Draft4Validator, FormatChecker
+from requests import Response
 from singer import metadata
 
 from tap_qualtrics.discover import discover
@@ -26,7 +28,7 @@ def _detail_response(stream_cls, survey_id):
     if stream_cls is SurveyQuestions:
         return {"result": {"elements": [{"QuestionID": "QID1"}]}}
     if stream_cls is SurveyDefinitions:
-        return {"result": {"SurveyID": survey_id}}
+        return {"result": {"SurveyID": survey_id, "LastModified": LAST_MODIFIED}}
     return {"result": {"FlowID": "FL_1", "Type": "Root", "Flow": []}}
 
 
@@ -53,6 +55,11 @@ def test_streams_are_registered_as_incremental_survey_children():
         "survey_questions": ["survey_id", "QuestionID"],
         "survey_flows": ["survey_id"],
     }
+    expected_replication_keys = {
+        "survey_definitions": ["LastModified"],
+        "survey_questions": ["lastModified"],
+        "survey_flows": ["lastModified"],
+    }
 
     for stream_cls in DETAIL_STREAMS:
         stream_id = stream_cls.tap_stream_id
@@ -64,23 +71,32 @@ def test_streams_are_registered_as_incremental_survey_children():
         assert stream_cls.parent == "surveys"
         assert stream_id in surveys.children
         assert metadata.get(mdata, (), "parent-tap-stream-id") == "surveys"
-        assert metadata.get(mdata, (), "valid-replication-keys") == ["lastModified"]
-        assert metadata.get(mdata, ("properties", "lastModified"), "inclusion") == "automatic"
+        replication_key = expected_replication_keys[stream_id][0]
+        assert metadata.get(mdata, (), "valid-replication-keys") == [replication_key]
+        assert metadata.get(
+            mdata, ("properties", replication_key), "inclusion"
+        ) == "automatic"
         for key in expected_keys[stream_id]:
             assert metadata.get(mdata, ("properties", key), "inclusion") == "automatic"
 
 
-def test_stream_records_use_endpoint_shape_and_parent_replication_key():
+def test_stream_records_use_endpoint_shape_and_replication_fields():
     responses = [
         (
             SurveyDefinitions,
             "survey-definitions/SV_1",
-            {"result": {"SurveyID": SURVEY_ID, "SurveyName": "Example"}},
+            {
+                "result": {
+                    "SurveyID": SURVEY_ID,
+                    "SurveyName": "Example",
+                    "LastModified": LAST_MODIFIED,
+                }
+            },
             {
                 "SurveyID": SURVEY_ID,
                 "SurveyName": "Example",
                 "survey_id": SURVEY_ID,
-                "lastModified": LAST_MODIFIED,
+                "LastModified": LAST_MODIFIED,
             },
         ),
         (
@@ -140,7 +156,11 @@ def test_questions_retain_repeating_question_ids_per_survey():
             return {"result": {"FlowID": "FL_1", "Type": survey_id, "Flow": []}}
         if path.startswith("survey-definitions/"):
             survey_id = path.split("/")[-1]
-            return {"result": {"SurveyID": survey_id, "SurveyName": survey_id}}
+            return {"result": {
+                "SurveyID": survey_id,
+                "SurveyName": survey_id,
+                "LastModified": LAST_MODIFIED,
+            }}
         raise AssertionError(f"Unexpected request: {path}")
 
     client.get.side_effect = get
@@ -181,10 +201,16 @@ def test_questions_retain_repeating_question_ids_per_survey():
                 params={"pageSize": 100},
             )
     for stream_cls in DETAIL_STREAMS:
+        replication_key = stream_cls.replication_keys[0]
+        expected_bookmark = (
+            LAST_MODIFIED
+            if stream_cls is SurveyDefinitions
+            else surveys[-1]["lastModified"]
+        )
         assert singer.utils.strptime_to_utc(
-            state["bookmarks"][stream_cls.tap_stream_id]["lastModified"]
+            state["bookmarks"][stream_cls.tap_stream_id][replication_key]
         ) == singer.utils.strptime_to_utc(
-            surveys[-1]["lastModified"]
+            expected_bookmark
         )
 
 
@@ -207,14 +233,16 @@ def test_out_of_order_surveys_and_interrupted_sync_resume(stream_cls):
         if stream_cls is SurveyQuestions:
             return {"result": {"elements": [{"QuestionID": "QID1"}]}}
         if stream_cls is SurveyDefinitions:
-            return {"result": {"SurveyID": survey_id}}
+            return {"result": {"SurveyID": survey_id, "LastModified": LAST_MODIFIED}}
         return {"result": {"FlowID": "FL_1", "Type": "Root", "Flow": []}}
 
     client.get.side_effect = get
     catalog = _selected_catalog({stream_cls.tap_stream_id})
     initial_bookmarks = {
         "surveys": {"lastModified": "2020-01-01T00:00:00Z"},
-        stream_cls.tap_stream_id: {"lastModified": "2020-01-01T00:00:00Z"},
+        stream_cls.tap_stream_id: {
+            stream_cls.replication_keys[0]: "2020-01-01T00:00:00Z"
+        },
     }
     state = {"bookmarks": copy.deepcopy(initial_bookmarks)}
     with patch("tap_qualtrics.streams.abstracts.write_record") as write_record, \
@@ -231,9 +259,18 @@ def test_out_of_order_surveys_and_interrupted_sync_resume(stream_cls):
         "SV_new", "SV_old",
     ]
     for stream_id in ("surveys", stream_cls.tap_stream_id):
+        bookmark_key = (
+            "lastModified" if stream_id == "surveys"
+            else stream_cls.replication_keys[0]
+        )
+        expected_bookmark = (
+            surveys[0]["lastModified"]
+            if stream_id == "surveys" or stream_cls is not SurveyDefinitions
+            else LAST_MODIFIED
+        )
         assert singer.utils.strptime_to_utc(
-            state["bookmarks"][stream_id]["lastModified"]
-        ) == singer.utils.strptime_to_utc(surveys[0]["lastModified"])
+            state["bookmarks"][stream_id][bookmark_key]
+        ) == singer.utils.strptime_to_utc(expected_bookmark)
 
 
 def test_question_page_failure_does_not_checkpoint_partial_survey():
@@ -294,7 +331,11 @@ def test_question_page_failure_does_not_checkpoint_partial_survey():
 ])
 def test_declared_payload_fields_survive_singer_transformation(stream_id, fields):
     entry = discover().get_stream(stream_id)
-    record = {"survey_id": "SV_1", "lastModified": LAST_MODIFIED, **fields}
+    record = {
+        "survey_id": "SV_1",
+        STREAMS[stream_id].replication_keys[0]: LAST_MODIFIED,
+        **fields,
+    }
     schema = entry.schema.to_dict()
     with singer.Transformer() as transformer:
         transformed = transformer.transform(copy.deepcopy(record), schema, metadata.to_map(entry.metadata))
@@ -327,6 +368,42 @@ def test_question_choice_shapes_and_order_transform_consistently(choices):
     assert transformed["ChoiceOrder"] == ["1", "2"]
 
 
+@pytest.mark.parametrize("randomization", [
+    {"Advanced": {"RandomizeAll": True, "DisplayCount": 2}, "Order": ["1", "2"]},
+    "All",
+    None,
+])
+def test_question_randomization_preserves_type_in_emitted_record(randomization, capsys):
+    catalog = singer.Catalog.from_dict(json.loads(json.dumps(
+        _selected_catalog({"survey_questions"}).to_dict()
+    )))
+    client = _client()
+    response = Response()
+    response.status_code = 200
+    response._content = json.dumps({"result": {"elements": [{
+        "QuestionID": "QID1", "Randomization": randomization,
+    }]}}).encode("utf-8")
+    client.get.side_effect = lambda path, **kwargs: (
+        {"result": {"elements": [copy.deepcopy(PARENT)]}}
+        if path == "surveys" else response.json()
+    )
+
+    sync(client, client.config, catalog, {})
+
+    messages = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    records = [
+        message["record"] for message in messages
+        if message["type"] == "RECORD" and message["stream"] == "survey_questions"
+    ]
+    assert len(records) == 1
+    assert records[0]["Randomization"] == randomization
+    assert type(records[0]["Randomization"]) is type(randomization)
+    Draft4Validator(
+        catalog.get_stream("survey_questions").schema.to_dict(),
+        format_checker=FormatChecker(),
+    ).validate(records[0])
+
+
 @pytest.mark.parametrize("stream_cls", DETAIL_STREAMS)
 @pytest.mark.parametrize("child_bookmark", [None, "2026-01-01T00:00:00Z"])
 def test_upgrade_backfills_child_without_replaying_parent_or_other_children(
@@ -356,7 +433,9 @@ def test_upgrade_backfills_child_without_replaying_parent_or_other_children(
     client.get.side_effect = get
     state = {"bookmarks": {"surveys": {"lastModified": "2026-02-01T00:00:00Z"}}}
     if child_bookmark:
-        state["bookmarks"][stream_cls.tap_stream_id] = {"lastModified": child_bookmark}
+        state["bookmarks"][stream_cls.tap_stream_id] = {
+            stream_cls.replication_keys[0]: child_bookmark
+        }
     catalog = _selected_catalog({"surveys", "survey", stream_cls.tap_stream_id})
     with patch("tap_qualtrics.streams.abstracts.write_record") as write_record, \
             patch("tap_qualtrics.streams.surveys.write_record", new=write_record), \
@@ -372,15 +451,87 @@ def test_upgrade_backfills_child_without_replaying_parent_or_other_children(
     ]
     assert [record["id"] for record in emitted["surveys"]] == ["SV_new"]
     assert [record["id"] for record in emitted["survey"]] == ["SV_new"]
+    expected_parent_start = (
+        client.config["start_date"]
+        if stream_cls is SurveyDefinitions
+        else child_bookmark or client.config["start_date"]
+    )
     client.get.assert_any_call(
-        "surveys", params={
-            "startDate": child_bookmark or client.config["start_date"], "pageSize": 100,
-        },
+        "surveys",
+        params={"startDate": expected_parent_start, "pageSize": 100},
     )
     for stream_id in ("surveys", stream_cls.tap_stream_id):
+        bookmark_key = (
+            "lastModified" if stream_id == "surveys"
+            else stream_cls.replication_keys[0]
+        )
+        expected_bookmark = (
+            parents[-1]["lastModified"]
+            if stream_id == "surveys" or stream_cls is not SurveyDefinitions
+            else LAST_MODIFIED
+        )
         assert singer.utils.strptime_to_utc(
-            state["bookmarks"][stream_id]["lastModified"]
+            state["bookmarks"][stream_id][bookmark_key]
+        ) == singer.utils.strptime_to_utc(expected_bookmark)
+    if stream_cls is SurveyDefinitions:
+        assert singer.utils.strptime_to_utc(
+            state["bookmarks"]["survey_definitions"]["parent_lastModified"]
         ) == singer.utils.strptime_to_utc(parents[-1]["lastModified"])
+
+
+def test_survey_definition_api_bookmark_is_not_used_as_parent_cursor():
+    parent_bookmark = "2026-03-01T00:00:00Z"
+    parent_cursor = "2026-02-01T00:00:00Z"
+    definition_bookmark = "2026-12-01T00:00:00Z"
+    parents = [
+        {"id": "SV_old", "lastModified": "2026-02-15T00:00:00Z"},
+        {"id": "SV_new", "lastModified": parent_bookmark},
+    ]
+    client = _client()
+
+    def get(path, **kwargs):
+        if path == "surveys":
+            return {"result": {"elements": copy.deepcopy(parents)}}
+        survey_id = path.rsplit("/", 1)[-1]
+        definition_timestamp = (
+            "2026-11-30T00:00:00Z"
+            if survey_id == "SV_old"
+            else "2026-12-15T00:00:00Z"
+        )
+        return {"result": {
+            "SurveyID": survey_id,
+            "LastModified": definition_timestamp,
+        }}
+
+    client.get.side_effect = get
+    state = {"bookmarks": {
+        "surveys": {"lastModified": parent_bookmark},
+        "survey_definitions": {
+            "LastModified": definition_bookmark,
+            "parent_lastModified": parent_cursor,
+        },
+    }}
+
+    with patch("tap_qualtrics.streams.abstracts.write_record") as write_record, \
+            patch("tap_qualtrics.streams.abstracts.write_schema"), \
+            patch("singer.write_state"):
+        sync(client, client.config, _selected_catalog({"survey_definitions"}), state)
+
+    client.get.assert_any_call(
+        "surveys",
+        params={"startDate": parent_cursor, "pageSize": 100},
+    )
+    records = [
+        args[1] for args, _ in write_record.call_args_list
+        if args[0] == "survey_definitions"
+    ]
+    assert [record["SurveyID"] for record in records] == ["SV_new"]
+    assert state["bookmarks"]["survey_definitions"]["LastModified"] == (
+        "2026-12-15T00:00:00.000000Z"
+    )
+    assert state["bookmarks"]["survey_definitions"]["parent_lastModified"] == (
+        parent_bookmark
+    )
 
 
 @pytest.mark.parametrize("response", [

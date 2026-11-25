@@ -351,7 +351,7 @@ class SurveyChildStream(FullTableStream):
 
 
 class IncrementalSurveyChildStream(IncrementalStream):
-    """Incremental stream fetched once per survey; uses parent's lastModified as replication key."""
+    """Incremental stream fetched once per survey."""
 
     def __init__(self, client=None, catalog_entry=None) -> None:
         super().__init__(client=client, catalog_entry=catalog_entry)

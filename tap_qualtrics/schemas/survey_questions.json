@@ -169,8 +169,8 @@
         "Randomization": {
             "type": [
                 "null",
-                "string",
-                "object"
+                "object",
+                "string"
             ],
             "patternProperties": {
                 ".*": {}
