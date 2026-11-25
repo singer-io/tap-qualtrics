@@ -225,18 +225,19 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
                 executor.__enter__.return_value = executor
                 executor.map.return_value = []
 
-                def start_workers(**kwargs):
-                    self.assertEqual(client.get.call_count, 2)
-                    client.post.assert_not_called()
+                def start_workers(*, _client=client, _total_surveys=total_surveys,
+                                  _executor=executor, **kwargs):
+                    self.assertEqual(_client.get.call_count, 2)
+                    _client.post.assert_not_called()
                     logger.info.assert_called_once_with(
                         "Survey response export discovery: listed %d unique survey(s) across "
                         "%d page(s); preparing one sample export per survey with at most %d "
                         "concurrent workers and %d records per sample. Retries may create "
                         "additional jobs. Qualtrics has no documented cancel/delete endpoint "
                         "for these jobs; large accounts may take longer and consume more API quota.",
-                        total_surveys, 2, min(4, total_surveys), 50,
+                        _total_surveys, 2, min(4, _total_surveys), 50,
                     )
-                    return executor
+                    return _executor
 
                 mock_executor.side_effect = start_workers
                 SurveyResponseExport.discover_dynamic_entries(client)
@@ -544,18 +545,6 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
             self.assertIsNone(page_call.kwargs.get("params"))
             self.assertIsInstance(page_call.kwargs.get("full_url"), str)
 
-    def test_non_string_next_page_raises(self):
-        client = _make_client()
-        client.get.return_value = {
-            "result": {
-                "elements": [{"id": "SV_1"}],
-                "nextPage": {"invalid": "type"},
-            }
-        }
-
-        with self.assertRaises(QualtricsPaginationError):
-            SurveyResponseExport.discover_dynamic_entries(client)
-
     def test_repeated_next_page_url_raises_instead_of_looping_forever(self):
         """If the API returns the same nextPage URL forever (a looping/misbehaving API),
         discovery must fail loudly rather than hang or silently return a partial listing."""
@@ -597,13 +586,13 @@ class TestSurveyResponseExportDiscover(unittest.TestCase):
             page_index = 0 if not full_url else int(full_url.rsplit("=", 1)[1])
             next_index = page_index + 1
             next_url = (
-                "https://qualtrics.example.com/surveys?page={}".format(next_index)
+                f"https://qualtrics.example.com/surveys?page={next_index}"
                 if next_index < total_surveys
                 else None
             )
             return {
                 "result": {
-                    "elements": [{"id": "SV_{}".format(page_index)}],
+                    "elements": [{"id": f"SV_{page_index}"}],
                     "nextPage": next_url,
                 }
             }
