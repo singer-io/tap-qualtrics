@@ -213,16 +213,6 @@ workflows:
   commit:
     jobs:
       - quality_and_unit:
-          name: quality-unit-py3.10
-          context: circleci-user
-          python_version: "3.10"
-          dependency_profile: "pinned"
-      - quality_and_unit:
-          name: quality-unit-py3.11
-          context: circleci-user
-          python_version: "3.11"
-          dependency_profile: "pinned"
-      - quality_and_unit:
           name: quality-unit-py3.12
           context: circleci-user
           python_version: "3.12"

@@ -98,8 +98,8 @@ class SurveyResponseExport(IncrementalStream):
                 # A 403 after at least one successful page means pagination stopped before
                 # completion; failing here prevents silently emitting a partial catalog.
                 raise QualtricsPaginationError(
-                    "GET /surveys returned 403 during discovery after {} page(s); refusing "
-                    "to continue with a partial survey listing.".format(page_count)
+                    f"GET /surveys returned 403 during discovery after {page_count} page(s); refusing "
+                    "to continue with a partial survey listing."
                 ) from exc
             page_count += 1
             result = surveys_resp.get("result") or {}
@@ -116,8 +116,8 @@ class SurveyResponseExport(IncrementalStream):
             next_url = result.get("nextPage")
             if next_url is not None and not isinstance(next_url, str):
                 raise QualtricsPaginationError(
-                    "GET /surveys returned invalid nextPage type {} during discovery after {} "
-                    "page(s); expected a URL string or null.".format(type(next_url).__name__, page_count)
+                    f"GET /surveys returned invalid nextPage type {type(next_url).__name__} during discovery after {page_count} "
+                    "page(s); expected a URL string or null."
                 )
             has_more_pages = bool(next_url)
 
@@ -129,11 +129,11 @@ class SurveyResponseExport(IncrementalStream):
                 stale_page_count += 1
                 if stale_page_count >= DISCOVERY_MAX_STALE_PAGES:
                     raise QualtricsPaginationError(
-                        "GET /surveys returned {} consecutive page(s) during discovery with no "
-                        "new survey ids, after {} page(s) total, while still reporting more "
+                        f"GET /surveys returned {stale_page_count} consecutive page(s) during discovery with no "
+                        f"new survey ids, after {page_count} page(s) total, while still reporting more "
                         "pages; refusing to loop forever or silently return a partial survey "
                         "listing. This likely indicates the API is not making forward progress."
-                        .format(stale_page_count, page_count)
+                        
                     )
             else:
                 stale_page_count = 0

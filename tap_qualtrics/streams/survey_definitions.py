@@ -1,13 +1,18 @@
+from typing import ClassVar
+
 from tap_qualtrics.streams.abstracts import ChildBaseStream
 
 
 class SurveyDefinitions(ChildBaseStream):
     tap_stream_id = "survey_definitions"
-    key_properties: ClassVar = ["SurveyID"]
+    key_properties: ClassVar[list[str]] = ["SurveyID"]
     replication_method = "INCREMENTAL"
-    replication_keys = ["LastModified"]
+    replication_keys: ClassVar[list[str]] = ["LastModified"]
     data_key = "result"
-    response_record_fields = {"SurveyID": str, "LastModified": str}
+    response_record_fields: ClassVar[dict[str, type]] = {
+        "SurveyID": str,
+        "LastModified": str
+    }
     path = "survey-definitions/{survey_id}"
     parent = "surveys"
     parent_cursor_key = "parent_lastModified"
